@@ -4,7 +4,12 @@
     android:viewportWidth="24"
     android:viewportHeight="24"
     android:tint="#FFFFFF">
+    <!-- Derived from opencode-monochrome.svg (512x512, group matrix baked in, scaled to 24dp) -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M12,2 L4,6 L4,12 C4,16.5 7.4,20.7 12,22 C16.6,20.7 20,16.5 20,12 L20,6 Z M11,7 L13,7 L13,13 L11,13 Z M11,15 L13,15 L13,17 L11,17 Z" />
+        android:fillType="evenOdd"
+        android:pathData="M20.1,22.125 H3.9 V1.875 H20.1 Z M16.05,5.925 H7.95 v12.15 h8.1 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15.544,9.975 V17.695 H8.456 V9.975 Z" />
 </vector>
