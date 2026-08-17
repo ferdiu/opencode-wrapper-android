@@ -2,7 +2,10 @@ package com.opencode.wrapper.service
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.flow.collect
 
 /**
  * Keeps a single OpenCode event connection alive for as long as Android will
@@ -46,6 +50,7 @@ class OpenCodeEventService : LifecycleService() {
         NotificationHelper.ensureChannels(this)
     }
 
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
@@ -56,7 +61,7 @@ class OpenCodeEventService : LifecycleService() {
             this,
             NotificationHelper.SERVICE_NOTIFICATION_ID,
             notification,
-            ServiceCompat.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
 
         if (!running) {
@@ -97,8 +102,8 @@ class OpenCodeEventService : LifecycleService() {
         }
     }
 
-    /** Returns true if the stream ended and we should reconnect; false only
-     *  if collection was cancelled because the service is shutting down. */
+    /** Returns true if the stream ended, and we should reconnect; false only
+     *  if collection was canceled because the service is shutting down. */
     private suspend fun runEventStream(client: OpenCodeClient, config: ServerConfig): Boolean {
         return try {
             client.events(sessionId = null) // instance-wide: all sessions
