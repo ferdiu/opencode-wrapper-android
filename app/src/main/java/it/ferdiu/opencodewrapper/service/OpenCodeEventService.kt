@@ -108,7 +108,7 @@ class OpenCodeEventService : LifecycleService() {
         return try {
             client.events(sessionId = null) // instance-wide: all sessions
                 .onEach { event -> notificationRouter.onEvent(event) }
-                .catch { e -> Log.w(TAG, "Event stream error: ${e.message}") }
+                .catch { e -> Log.w(TAG, "Event stream error", e) }
                 .collect()
             true // flow completed (server closed the stream) -> reconnect
         } catch (e: CancellationException) {

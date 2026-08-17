@@ -23,6 +23,7 @@ class NotificationRouter(private val context: Context) {
     private val sessionTitles = mutableMapOf<String, String>()
 
     fun onEvent(event: OcEvent) {
+        Log.d(TAG, "onEvent: $event")
         when (event) {
             is OcEvent.SessionUpdated -> {
                 event.title?.let { sessionTitles[event.sessionId] = it }

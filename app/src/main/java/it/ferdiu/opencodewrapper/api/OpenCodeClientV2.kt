@@ -79,11 +79,18 @@ class OpenCodeClientV2(
 
         val listener = object : EventSourceListener() {
             override fun onOpen(eventSource: EventSource, response: Response) {
-                Log.i(TAG, "SSE connected: $url")
+                Log.i(TAG, "SSE connected: $url (HTTP ${response.code})")
             }
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 if (data.isBlank()) return
+                // Diagnostics: log every event type (SSE field + JSON type) so we
+                // can see exactly what the server sends. TODO: trim once the
+                // notification pipeline is verified end-to-end on real servers.
+                val jsonType = runCatching {
+                    (json.parseToJsonElement(data).jsonObject["type"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                }.getOrNull()
+                Log.i(TAG, "SSE event: sseType=$type jsonType=$jsonType data=${data.take(300)}")
                 val parsed = runCatching {
                     val element = json.parseToJsonElement(data)
                     OcEventParser.parse(element.jsonObject)
