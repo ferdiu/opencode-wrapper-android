@@ -1,0 +1,8 @@
+<resources>
+    <color name="primary">#2F6F4F</color>
+    <color name="primary_dark">#1F4E36</color>
+    <color name="accent">#E8A33D</color>
+    <color name="background">#0F1210</color>
+    <color name="surface">#181C19</color>
+    <color name="on_surface">#EDEFEC</color>
+</resources>

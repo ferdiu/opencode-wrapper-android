@@ -1,0 +1,178 @@
+package com.opencode.wrapper.ui
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
+import android.view.Menu
+import android.view.MenuItem
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.opencode.wrapper.R
+import com.opencode.wrapper.data.ServerConfig
+import com.opencode.wrapper.data.ServerConfigStore
+import com.opencode.wrapper.databinding.ActivityMainBinding
+import com.opencode.wrapper.service.OpenCodeEventService
+
+/**
+ * Deliberately thin: loads the real OpenCode web app in a WebView and gets
+ * out of the way. All the "does this survive backgrounding" work lives in
+ * OpenCodeEventService, not here - this activity does not need to stay alive
+ * for notifications to keep working.
+ */
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityMainBinding
+    private lateinit var configStore: ServerConfigStore
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op either way */ }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        configStore = ServerConfigStore(this)
+
+        setupWebView()
+        binding.openSettingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        maybeRequestNotificationPermission()
+        maybeRequestBatteryOptimizationExemption()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val config = configStore.get()
+        if (config == null) {
+            binding.emptyState.visibility = android.view.View.VISIBLE
+            binding.webView.visibility = android.view.View.GONE
+        } else {
+            binding.emptyState.visibility = android.view.View.GONE
+            binding.webView.visibility = android.view.View.VISIBLE
+            if (binding.webView.url == null) {
+                loadServer(config, intent?.getStringExtra(EXTRA_SESSION_ID))
+            }
+            OpenCodeEventService.start(this)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return
+        val config = configStore.get() ?: return
+        navigateToSession(config, sessionId)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        val webView = binding.webView
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            javaScriptCanOpenWindowsAutomatically = false
+            mediaPlaybackRequiresUserGesture = false
+        }
+
+        CookieManager.getInstance().apply {
+            setAcceptCookie(true)
+            setAcceptThirdPartyCookies(webView, true)
+        }
+
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                // Keep normal in-app navigation inside the WebView; only the
+                // configured host is ever loaded here in the first place.
+                return false
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                binding.progressBar.visibility = android.view.View.GONE
+            }
+        }
+
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(view: WebView, newProgress: Int) {
+                binding.progressBar.visibility = if (newProgress in 1..99) android.view.View.VISIBLE else android.view.View.GONE
+                binding.progressBar.progress = newProgress
+            }
+        }
+    }
+
+    private fun loadServer(config: ServerConfig, sessionId: String?) {
+        val url = if (sessionId != null) sessionUrl(config, sessionId) else config.normalizedBaseUrl
+        binding.webView.loadUrl(url)
+    }
+
+    private fun navigateToSession(config: ServerConfig, sessionId: String) {
+        configStore.setLastSessionId(sessionId)
+        binding.webView.loadUrl(sessionUrl(config, sessionId))
+    }
+
+    /**
+     * Best-effort deep link into a specific session.
+     *
+     * NOTE: I could not verify the OpenCode web app's exact client-side
+     * routing scheme for opening a session directly (it may be a path like
+     * `/session/{id}`, a hash route, or a query param depending on the web
+     * app build served by the server). `/session/{id}` matches the
+     * confirmed *API* path and is a reasonable first guess for the web
+     * app's router too, but if your deployment uses a different scheme,
+     * change only this function.
+     */
+    private fun sessionUrl(config: ServerConfig, sessionId: String): String =
+        "${config.normalizedBaseUrl}/session/$sessionId"
+
+    private fun maybeRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun maybeRequestBatteryOptimizationExemption() {
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+                )
+            }
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_settings) {
+            startActivity(Intent(this, SettingsActivity::class.java))
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    companion object {
+        const val EXTRA_SESSION_ID = "extra_session_id"
+    }
+}

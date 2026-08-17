@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">OpenCode Companion</string>
+    <string name="settings_title">Server Settings</string>
+
+    <string name="label_server_url">Server URL</string>
+    <string name="hint_server_url">https://opencode.example.com or http://192.168.1.10:4096</string>
+    <string name="label_auth_header">Auth header value (optional)</string>
+    <string name="hint_auth_header">Bearer token or API key, if your server requires one</string>
+    <string name="action_save">Save &amp; Connect</string>
+    <string name="action_open_settings">Server settings</string>
+
+    <string name="notif_channel_status_name">Session status</string>
+    <string name="notif_channel_status_desc">Session finished or idle</string>
+    <string name="notif_channel_action_name">Needs your input</string>
+    <string name="notif_channel_action_desc">Permission requests and agent questions</string>
+    <string name="notif_channel_error_name">Session errors</string>
+    <string name="notif_channel_error_desc">Failures that stopped a session</string>
+    <string name="notif_channel_service_name">Connection status</string>
+    <string name="notif_channel_service_desc">Ongoing OpenCode event connection</string>
+
+    <string name="service_notif_title">OpenCode connected</string>
+    <string name="service_notif_connecting">Connecting to OpenCode…</string>
+    <string name="service_notif_reconnecting">Reconnecting…</string>
+    <string name="service_notif_offline">Not connected — tap to configure</string>
+
+    <string name="onboarding_message">Enter your OpenCode server address to get started. This app keeps a background connection alive so you get notifications even when it\'s not open.</string>
+</resources>
