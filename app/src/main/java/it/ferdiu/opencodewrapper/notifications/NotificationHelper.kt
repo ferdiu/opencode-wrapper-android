@@ -13,10 +13,17 @@ import it.ferdiu.opencodewrapper.ui.MainActivity
 
 object NotificationHelper {
 
-    const val CHANNEL_STATUS = "opencode_status"
-    const val CHANNEL_ACTION = "opencode_action"
-    const val CHANNEL_ERROR = "opencode_error"
-    const val CHANNEL_SERVICE = "opencode_service"
+    // "_v2" suffix: channel importance is immutable once a channel exists on
+    // a device, so the importance bump (STATUS: DEFAULT -> HIGH) only takes
+    // effect on fresh channel IDs. Legacy channels are deleted below.
+    const val CHANNEL_STATUS = "opencode_status_v2"
+    const val CHANNEL_ACTION = "opencode_action_v2"
+    const val CHANNEL_ERROR = "opencode_error_v2"
+    const val CHANNEL_SERVICE = "opencode_service_v2"
+
+    private val LEGACY_CHANNELS = listOf(
+        "opencode_status", "opencode_action", "opencode_error", "opencode_service",
+    )
 
     const val SERVICE_NOTIFICATION_ID = 1
     private var nextEventNotificationId = 1000
@@ -25,8 +32,10 @@ object NotificationHelper {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
 
+        LEGACY_CHANNELS.forEach { manager.deleteNotificationChannel(it) }
+
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_STATUS, context.getString(R.string.notif_channel_status_name), NotificationManager.IMPORTANCE_DEFAULT)
+            NotificationChannel(CHANNEL_STATUS, context.getString(R.string.notif_channel_status_name), NotificationManager.IMPORTANCE_HIGH)
                 .apply { description = context.getString(R.string.notif_channel_status_desc) }
         )
         manager.createNotificationChannel(
@@ -93,7 +102,7 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setPriority(
-                if (channel == CHANNEL_STATUS) NotificationCompat.PRIORITY_DEFAULT
+                if (channel == CHANNEL_SERVICE) NotificationCompat.PRIORITY_MIN
                 else NotificationCompat.PRIORITY_HIGH
             )
             .build()

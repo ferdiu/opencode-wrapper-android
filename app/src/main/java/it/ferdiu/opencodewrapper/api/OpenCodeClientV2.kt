@@ -90,6 +90,9 @@ class OpenCodeClientV2(
                 }.onFailure { e ->
                     Log.w(TAG, "Skipping malformed SSE payload: ${e.message}")
                 }.getOrNull() ?: return
+                if (parsed is OcEvent.Unknown) {
+                    Log.d(TAG, "Unrecognized SSE event type '${parsed.type}' — update OcEventParser if it should notify")
+                }
                 trySend(parsed)
             }
 

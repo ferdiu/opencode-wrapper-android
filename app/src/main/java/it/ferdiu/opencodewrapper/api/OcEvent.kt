@@ -92,19 +92,37 @@ object OcEventParser {
                 OcEvent.SessionError(sid, message)
             }
 
-            // Confirmed v1 naming: a permission request shows up as
-            // permission.updated with no matching permission.replied yet.
+            // v2 schema: properties = { id, sessionID, permission, patterns,
+            // metadata, always, tool? }. There is no "title" field - use the
+            // permission name plus the first pattern as human-readable text.
+            // "permission.updated" kept for older servers.
             "permission.updated", "permission.asked" -> {
                 val id = props.stringOrNull("id") ?: props.stringOrNull("permissionID")
                 val sid = props.stringOrNull("sessionID")
                 if (id == null || sid == null) return OcEvent.Unknown(type, json)
-                OcEvent.PermissionAsked(id, sid, props.stringOrNull("title"))
+                val label = props.stringOrNull("title")
+                    ?: props.stringOrNull("permission")?.let { perm ->
+                        val pattern = (props["patterns"] as? kotlinx.serialization.json.JsonArray)
+                            ?.firstOrNull()?.let { (it as? JsonPrimitive)?.contentOrNullSafe() }
+                        if (pattern != null) "$perm: $pattern" else perm
+                    }
+                OcEvent.PermissionAsked(id, sid, label)
             }
 
+            // v2 schema: properties = { id, sessionID, questions: [{ question,
+            // header, options, ... }], tool? }. Older payloads used requestID /
+            // prompt - accept both. There is no top-level "prompt" in v2.
             "question.asked" -> {
-                val id = props.stringOrNull("requestID") ?: return OcEvent.Unknown(type, json)
+                val id = props.stringOrNull("requestID") ?: props.stringOrNull("id")
+                    ?: return OcEvent.Unknown(type, json)
                 val sid = props.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
-                OcEvent.QuestionAsked(id, sid, props.stringOrNull("prompt") ?: props.stringOrNull("message"))
+                val prompt = props.stringOrNull("prompt") ?: props.stringOrNull("message")
+                    ?: (props["questions"] as? kotlinx.serialization.json.JsonArray)
+                        ?.firstOrNull()?.let { q ->
+                            (q as? JsonObject)?.stringOrNull("question")
+                                ?: (q as? JsonObject)?.stringOrNull("header")
+                        }
+                OcEvent.QuestionAsked(id, sid, prompt)
             }
 
             "session.updated", "session.created" -> {

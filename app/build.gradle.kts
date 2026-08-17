@@ -66,4 +66,6 @@ dependencies {
 
     // Backup path for reconnect nudges if the OS kills the foreground service.
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+
+    testImplementation("junit:junit:4.13.2")
 }
