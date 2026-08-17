@@ -16,7 +16,10 @@ Android notifications for things that actually need your attention
   event stream and turns permission requests, agent questions, session
   completion, and errors into native Android notifications — even when the
   app is closed.
-- Tapping a notification simply opens the app (no deep-linking).
+- A deep-link launcher: tapping a notification opens the app straight into
+  the relevant session in the WebView (verified web-UI route
+  `/{base64url(directory)}/session/{id}`; the directory is learned from the
+  global event envelope).
 
 **This app IS NOT:**
 
@@ -90,6 +93,10 @@ Here's what's confirmed vs. what's a documented best guess:
 - `GET /session`, `GET /session/status`, `GET /session/{id}` — session
   listing/status/detail, used for the app's minimal persisted-state needs
   and reconnect recovery.
+- **Web-UI deep links**: session pages live at
+  `/{base64url(directory)}/session/{id}` (URL-safe base64, no padding) per
+  the web app router (`packages/app/src/app.tsx`,
+  `utils/session-route.ts#legacySessionHref`).
 
 **Explicitly *not* verified / best-effort, called out in code comments:**
 - **Durable replay/cursor endpoint.** I could not find a documented,
@@ -108,12 +115,8 @@ Here's what's confirmed vs. what's a documented best guess:
   whatever raw header value you type into Settings (accepts either
   `HeaderName: value` or a bare value, which defaults to `Authorization`)
   on every request, rather than assuming one specific scheme.
-- **Web app deep-link routing.** Tapping a notification loads
-  `{baseUrl}/session/{id}` in the WebView. This matches the confirmed *API*
-  path and is a reasonable guess for the web app's client-side router, but
-  I couldn't verify the actual SPA routing scheme. If your deployment uses
-  something else (a hash route, a query param, etc.), the one place to
-  change is `MainActivity.sessionUrl()`.
+- ~~Web app deep-link routing~~ — **now verified** (moved to "Confirmed"
+  above): session pages are `/{base64url(directory)}/session/{id}`.
 
 ## Background execution notes
 

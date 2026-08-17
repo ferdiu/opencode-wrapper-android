@@ -65,7 +65,11 @@ class MainActivity : AppCompatActivity() {
             binding.emptyState.visibility = android.view.View.GONE
             binding.webView.visibility = android.view.View.VISIBLE
             if (binding.webView.url == null) {
-                loadServer(config, intent?.getStringExtra(EXTRA_SESSION_ID))
+                loadServer(
+                    config,
+                    intent?.getStringExtra(EXTRA_SESSION_ID),
+                    intent?.getStringExtra(EXTRA_DIRECTORY),
+                )
             }
             OpenCodeEventService.start(this)
         }
@@ -75,8 +79,9 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return
+        val directory = intent.getStringExtra(EXTRA_DIRECTORY) ?: return
         val config = configStore.get() ?: return
-        navigateToSession(config, sessionId)
+        navigateToSession(config, sessionId, directory)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -114,29 +119,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadServer(config: ServerConfig, sessionId: String?) {
-        val url = if (sessionId != null) sessionUrl(config, sessionId) else config.normalizedBaseUrl
+    private fun loadServer(config: ServerConfig, sessionId: String?, directory: String?) {
+        val url = if (sessionId != null && directory != null) sessionUrl(config, sessionId, directory)
+            else config.normalizedBaseUrl
         binding.webView.loadUrl(url)
     }
 
-    private fun navigateToSession(config: ServerConfig, sessionId: String) {
+    private fun navigateToSession(config: ServerConfig, sessionId: String, directory: String) {
         configStore.setLastSessionId(sessionId)
-        binding.webView.loadUrl(sessionUrl(config, sessionId))
+        binding.webView.loadUrl(sessionUrl(config, sessionId, directory))
     }
 
     /**
-     * Best-effort deep link into a specific session.
+     * Deep link into a specific session in the OpenCode web UI.
      *
-     * NOTE: I could not verify the OpenCode web app's exact client-side
-     * routing scheme for opening a session directly (it may be a path like
-     * `/session/{id}`, a hash route, or a query param depending on the web
-     * app build served by the server). `/session/{id}` matches the
-     * confirmed *API* path and is a reasonable first guess for the web
-     * app's router too, but if your deployment uses a different scheme,
-     * change only this function.
+     * Confirmed against the v1.18.18 web app router
+     * (packages/app/src/app.tsx + utils/session-route.ts): session pages
+     * live at `/{base64url(directory)}/session/{id}`, where the directory
+     * segment is URL-safe base64 without padding (legacySessionHref). The
+     * directory is learned from the /global/event envelope.
      */
-    private fun sessionUrl(config: ServerConfig, sessionId: String): String =
-        "${config.normalizedBaseUrl}/session/$sessionId"
+    private fun sessionUrl(config: ServerConfig, sessionId: String, directory: String): String =
+        "${config.normalizedBaseUrl}/${base64Url(directory)}/session/$sessionId"
+
+    private fun base64Url(value: String): String =
+        android.util.Base64.encodeToString(
+            value.toByteArray(Charsets.UTF_8),
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP,
+        )
 
     private fun maybeRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
@@ -173,5 +183,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_SESSION_ID = "extra_session_id"
+        const val EXTRA_DIRECTORY = "extra_directory"
     }
 }

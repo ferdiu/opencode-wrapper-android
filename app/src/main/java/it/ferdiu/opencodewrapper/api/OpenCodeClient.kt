@@ -14,17 +14,13 @@ import kotlinx.coroutines.flow.Flow
 interface OpenCodeClient {
 
     /**
-     * Opens the live event stream. Emits [OcEvent]s until cancelled or the
-     * connection drops (in which case the flow completes/throws and the
-     * caller - [it.ferdiu.opencodewrapper.service.OpenCodeEventService] - is
+     * Opens the live event stream. Emits [OcEnvelope]s (event + originating
+     * project directory) until cancelled or the connection drops (in which
+     * case the flow completes/throws and the caller -
+     * [it.ferdiu.opencodewrapper.service.OpenCodeEventService] - is
      * responsible for reconnect/backoff).
-     *
-     * @param sessionId if non-null, uses the V2 session-scoped filtering
-     *   (`?session=`) so only events relevant to that session (plus
-     *   connection-level `server.*` events) are delivered. If null,
-     *   subscribes to every session on the instance.
      */
-    fun events(sessionId: String? = null): Flow<OcEvent>
+    fun events(): Flow<OcEnvelope>
 
     /** Simple reachability/auth check, used before starting the foreground service. */
     suspend fun healthCheck(): Boolean

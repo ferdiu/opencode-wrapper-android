@@ -49,6 +49,13 @@ sealed class OcEvent {
     data class Unknown(val type: String, val raw: JsonObject) : OcEvent()
 }
 
+/** A parsed event plus the project directory it belongs to. The directory
+ *  comes from the /global/event envelope
+ *  ({ "directory": "...", "payload": {...} }) and is needed to build web-UI
+ *  deep links of the form /{base64url(directory)}/session/{id}. Null for
+ *  events that carry no directory (or older unwrapped payloads). */
+data class OcEnvelope(val directory: String?, val event: OcEvent)
+
 object OcEventParser {
 
     /**

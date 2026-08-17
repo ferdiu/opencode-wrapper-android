@@ -68,7 +68,7 @@ class OpenCodeClientV2(
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    override fun events(sessionId: String?): Flow<OcEvent> = callbackFlow {
+    override fun events(): Flow<OcEnvelope> = callbackFlow {
         // /global/event (root scope) forwards ALL instance events on the
         // GlobalBus, regardless of project directory. The instance-scoped
         // /event endpoint silently filters events to one instance directory
@@ -92,8 +92,10 @@ class OpenCodeClientV2(
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 if (data.isBlank()) return
                 val parsed = runCatching {
-                    val element = json.parseToJsonElement(data)
-                    OcEventParser.parse(element.jsonObject)
+                    val element = json.parseToJsonElement(data).jsonObject
+                    val directory = (element["directory"] as? kotlinx.serialization.json.JsonPrimitive)
+                        ?.let { runCatching { it.content }.getOrNull() }
+                    OcEnvelope(directory, OcEventParser.parse(element))
                 }.onFailure { e ->
                     Log.w(TAG, "Skipping malformed SSE payload: ${e.message}")
                 }.getOrNull() ?: return

@@ -106,8 +106,8 @@ class OpenCodeEventService : LifecycleService() {
      *  if collection was canceled because the service is shutting down. */
     private suspend fun runEventStream(client: OpenCodeClient, config: ServerConfig): Boolean {
         return try {
-            client.events(sessionId = null) // instance-wide: all sessions
-                .onEach { event -> notificationRouter.onEvent(event) }
+            client.events() // global stream: all sessions across all projects
+                .onEach { envelope -> notificationRouter.onEvent(envelope.event, envelope.directory) }
                 .catch { e -> Log.w(TAG, "Event stream error", e) }
                 .collect()
             true // flow completed (server closed the stream) -> reconnect

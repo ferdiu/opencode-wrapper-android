@@ -72,20 +72,27 @@ object NotificationHelper {
             .build()
     }
 
-    /** Emits a user-facing notification for a session event. Tapping it just
-     *  opens the app — no deep-link into a specific session. */
+    /** Emits a user-facing notification for a session event. Tapping it opens
+     *  the app deep-linked into that session in the WebView when the project
+     *  directory is known (web-UI route /{base64url(directory)}/session/{id});
+     *  otherwise it just opens the app. */
     fun notifyEvent(
         context: Context,
         channel: String,
         title: String,
         text: String,
         sessionId: String?,
+        directory: String? = null,
     ) {
         val manager = context.getSystemService(NotificationManager::class.java)
         if (!manager.areNotificationsEnabled()) return
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (sessionId != null && directory != null) {
+                putExtra(MainActivity.EXTRA_SESSION_ID, sessionId)
+                putExtra(MainActivity.EXTRA_DIRECTORY, directory)
+            }
         }
         val pendingIntent = PendingIntent.getActivity(
             context,

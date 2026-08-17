@@ -22,17 +22,29 @@ class NotificationRouter(private val context: Context) {
     private val sessionWasBusy = mutableMapOf<String, Boolean>()
     private val sessionTitles = mutableMapOf<String, String>()
 
-    fun onEvent(event: OcEvent) {
+    /** Project directory per session, learned from the /global/event
+     *  envelope - needed to build web-UI deep links
+     *  (/{base64url(directory)}/session/{id}). */
+    private val sessionDirectories = mutableMapOf<String, String>()
+
+    private fun rememberDirectory(sessionId: String?, directory: String?) {
+        if (sessionId != null && directory != null) sessionDirectories[sessionId] = directory
+    }
+
+    fun onEvent(event: OcEvent, directory: String? = null) {
         when (event) {
             is OcEvent.SessionUpdated -> {
+                rememberDirectory(event.sessionId, directory)
                 event.title?.let { sessionTitles[event.sessionId] = it }
             }
 
             is OcEvent.SessionBusy -> {
+                rememberDirectory(event.sessionId, directory)
                 sessionWasBusy[event.sessionId] = true
             }
 
             is OcEvent.SessionIdle -> {
+                rememberDirectory(event.sessionId, directory)
                 val wasBusy = sessionWasBusy[event.sessionId] == true
                 sessionWasBusy[event.sessionId] = false
                 if (wasBusy) {
@@ -42,6 +54,7 @@ class NotificationRouter(private val context: Context) {
                         title = "Session finished",
                         text = sessionLabel(event.sessionId),
                         sessionId = event.sessionId,
+                        directory = sessionDirectories[event.sessionId],
                     )
                 }
             }
@@ -54,6 +67,7 @@ class NotificationRouter(private val context: Context) {
             }
 
             is OcEvent.SessionError -> {
+                rememberDirectory(event.sessionId, directory)
                 NotificationHelper.notifyEvent(
                     context = context,
                     channel = NotificationHelper.CHANNEL_ERROR,
@@ -61,10 +75,12 @@ class NotificationRouter(private val context: Context) {
                     text = event.message?.takeIf { it.isNotBlank() }
                         ?: "Something went wrong in ${sessionLabel(event.sessionId)}",
                     sessionId = event.sessionId,
+                    directory = sessionDirectories[event.sessionId],
                 )
             }
 
             is OcEvent.PermissionAsked -> {
+                rememberDirectory(event.sessionId, directory)
                 NotificationHelper.notifyEvent(
                     context = context,
                     channel = NotificationHelper.CHANNEL_ACTION,
@@ -72,10 +88,12 @@ class NotificationRouter(private val context: Context) {
                     text = event.title?.takeIf { it.isNotBlank() }
                         ?: "${sessionLabel(event.sessionId)} is waiting on a permission decision",
                     sessionId = event.sessionId,
+                    directory = sessionDirectories[event.sessionId],
                 )
             }
 
             is OcEvent.QuestionAsked -> {
+                rememberDirectory(event.sessionId, directory)
                 NotificationHelper.notifyEvent(
                     context = context,
                     channel = NotificationHelper.CHANNEL_ACTION,
@@ -83,6 +101,7 @@ class NotificationRouter(private val context: Context) {
                     text = event.prompt?.takeIf { it.isNotBlank() }
                         ?: "${sessionLabel(event.sessionId)} needs your input",
                     sessionId = event.sessionId,
+                    directory = sessionDirectories[event.sessionId],
                 )
             }
 
@@ -102,6 +121,7 @@ class NotificationRouter(private val context: Context) {
                 NotificationHelper.notifyEvent(
                     context, NotificationHelper.CHANNEL_STATUS,
                     "Session finished", sessionLabel(sessionId), sessionId,
+                    sessionDirectories[sessionId],
                 )
             }
             "busy" -> sessionWasBusy[sessionId] = true
