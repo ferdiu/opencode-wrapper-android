@@ -72,8 +72,8 @@ object NotificationHelper {
             .build()
     }
 
-    /** Emits a user-facing notification for a session event, deep-linking back
-     *  into the WebView at the relevant session. */
+    /** Emits a user-facing notification for a session event. Tapping it just
+     *  opens the app — no deep-link into a specific session. */
     fun notifyEvent(
         context: Context,
         channel: String,
@@ -86,7 +86,6 @@ object NotificationHelper {
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            if (sessionId != null) putExtra(MainActivity.EXTRA_SESSION_ID, sessionId)
         }
         val pendingIntent = PendingIntent.getActivity(
             context,

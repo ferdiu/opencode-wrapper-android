@@ -16,8 +16,7 @@ Android notifications for things that actually need your attention
   event stream and turns permission requests, agent questions, session
   completion, and errors into native Android notifications — even when the
   app is closed.
-- A deep-link launcher: tapping a notification drops you straight into the
-  relevant session in the WebView.
+- Tapping a notification simply opens the app (no deep-linking).
 
 **This app IS NOT:**
 
