@@ -57,8 +57,13 @@ object OcEventParser {
      * fail the whole connection on one malformed event.
      */
     fun parse(json: JsonObject): OcEvent {
-        val type = (json["type"] as? JsonPrimitive)?.contentOrNullSafe() ?: return OcEvent.Unknown("unknown", json)
-        val props = (json["properties"] as? JsonObject) ?: JsonObject(emptyMap())
+        // /global/event wraps each event in an envelope:
+        //   { "directory": "...", "payload": { "id", "type", "properties" } }
+        // Unwrap it; instance-scoped /event payloads arrive unwrapped.
+        val event = (json["payload"] as? JsonObject)?.takeIf { it["type"] is JsonPrimitive } ?: json
+
+        val type = (event["type"] as? JsonPrimitive)?.contentOrNullSafe() ?: return OcEvent.Unknown("unknown", json)
+        val props = (event["properties"] as? JsonObject) ?: JsonObject(emptyMap())
 
         return when (type) {
             "server.connected" -> OcEvent.Connected(json)

@@ -82,25 +82,7 @@ object NotificationHelper {
         sessionId: String?,
     ) {
         val manager = context.getSystemService(NotificationManager::class.java)
-
-        // Diagnostics: surface system-level suppression instead of silently
-        // dropping (denied POST_NOTIFICATIONS, disabled/low-importance channel).
-        val enabled = manager.areNotificationsEnabled()
-        val channelImportance = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.getNotificationChannel(channel)?.importance
-        } else null
-        android.util.Log.i(
-            "NotificationHelper",
-            "notifyEvent: channel=$channel title=$title notificationsEnabled=$enabled channelImportance=$channelImportance",
-        )
-        if (!enabled) {
-            android.util.Log.w("NotificationHelper", "Notifications are DISABLED for this app — event dropped")
-            return
-        }
-        if (channelImportance != null && channelImportance == NotificationManager.IMPORTANCE_NONE) {
-            android.util.Log.w("NotificationHelper", "Channel $channel is disabled by the user — event dropped")
-            return
-        }
+        if (!manager.areNotificationsEnabled()) return
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP

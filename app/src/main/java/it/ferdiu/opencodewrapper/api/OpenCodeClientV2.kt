@@ -69,10 +69,17 @@ class OpenCodeClientV2(
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     override fun events(sessionId: String?): Flow<OcEvent> = callbackFlow {
+        // /global/event (root scope) forwards ALL instance events on the
+        // GlobalBus, regardless of project directory. The instance-scoped
+        // /event endpoint silently filters events to one instance directory
+        // (server-side: event.location?.directory === instance.directory),
+        // which made every session/permission/question event invisible to us.
+        // Global payloads arrive wrapped in an envelope:
+        //   { "directory": "...", "payload": { "id", "type", "properties" } }
+        // OcEventParser unwraps it.
         val url = buildString {
             append(config.normalizedBaseUrl)
-            append("/event")
-            if (sessionId != null) append("?session=").append(sessionId)
+            append("/global/event")
         }
 
         val request = authedRequest(url).build()
@@ -84,22 +91,12 @@ class OpenCodeClientV2(
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 if (data.isBlank()) return
-                // Diagnostics: log every event type (SSE field + JSON type) so we
-                // can see exactly what the server sends. TODO: trim once the
-                // notification pipeline is verified end-to-end on real servers.
-                val jsonType = runCatching {
-                    (json.parseToJsonElement(data).jsonObject["type"] as? kotlinx.serialization.json.JsonPrimitive)?.content
-                }.getOrNull()
-                Log.i(TAG, "SSE event: sseType=$type jsonType=$jsonType data=${data.take(300)}")
                 val parsed = runCatching {
                     val element = json.parseToJsonElement(data)
                     OcEventParser.parse(element.jsonObject)
                 }.onFailure { e ->
                     Log.w(TAG, "Skipping malformed SSE payload: ${e.message}")
                 }.getOrNull() ?: return
-                if (parsed is OcEvent.Unknown) {
-                    Log.d(TAG, "Unrecognized SSE event type '${parsed.type}' — update OcEventParser if it should notify")
-                }
                 trySend(parsed)
             }
 

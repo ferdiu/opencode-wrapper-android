@@ -126,6 +126,30 @@ class OcEventParserTest {
     }
 
     @Test
+    fun `global event envelope is unwrapped`() {
+        val event = parse(
+            """
+            {
+              "directory": "/home/user/project",
+              "payload": {
+                "id": "evt_1",
+                "type": "question.asked",
+                "properties": {
+                  "id": "q_1",
+                  "sessionID": "ses_9",
+                  "questions": [{"question": "Proceed?", "header": "Confirm", "options": []}]
+                }
+              }
+            }
+            """.trimIndent()
+        )
+        assertTrue(event is OcEvent.QuestionAsked)
+        event as OcEvent.QuestionAsked
+        assertEquals("ses_9", event.sessionId)
+        assertEquals("Proceed?", event.prompt)
+    }
+
+    @Test
     fun `unrecognized event type becomes Unknown`() {
         val event = parse("""{"type":"pty.created","properties":{"info":{}}}""")
         assertTrue(event is OcEvent.Unknown)
