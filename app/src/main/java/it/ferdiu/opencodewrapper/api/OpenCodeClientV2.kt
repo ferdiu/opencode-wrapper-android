@@ -1,7 +1,7 @@
-package com.opencode.wrapper.api
+package it.ferdiu.opencodewrapper.api
 
 import android.util.Log
-import com.opencode.wrapper.data.ServerConfig
+import it.ferdiu.opencodewrapper.data.ServerConfig
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -115,8 +115,9 @@ class OpenCodeClientV2(
         val request = authedRequest("${config.normalizedBaseUrl}/session/$sessionId").build()
         val body = executeAsync(request).use { resp ->
             if (!resp.isSuccessful) return null
-            resp.body?.string()
-        } ?: return null
+            resp.body.string()
+        }
+        if (body.isEmpty()) return null
         val obj = json.parseToJsonElement(body).jsonObject
         sessionSnapshotFromInfo(obj)
     }.getOrNull()
@@ -125,8 +126,9 @@ class OpenCodeClientV2(
         val statusRequest = authedRequest("${config.normalizedBaseUrl}/session/status").build()
         val body = executeAsync(statusRequest).use { resp ->
             if (!resp.isSuccessful) return@runCatching emptyList()
-            resp.body?.string()
-        } ?: return@runCatching emptyList()
+            resp.body.string()
+        }
+        if (body.isEmpty()) return@runCatching emptyList()
 
         val root = json.parseToJsonElement(body)
         val entries = when {

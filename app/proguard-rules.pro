@@ -7,10 +7,10 @@
 -keepclasseswithmembers class kotlinx.serialization.json.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keep,includedescriptorclasses class com.opencode.wrapper.**$$serializer { *; }
--keepclassmembers class com.opencode.wrapper.** {
+-keep,includedescriptorclasses class it.ferdiu.opencodewrapper.**$serializer { *; }
+-keepclassmembers class it.ferdiu.opencodewrapper.** {
     *** Companion;
 }
--keepclasseswithmembers class com.opencode.wrapper.** {
+-keepclasseswithmembers class it.ferdiu.opencodewrapper.** {
     kotlinx.serialization.KSerializer serializer(...);
 }

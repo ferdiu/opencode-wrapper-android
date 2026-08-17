@@ -1,9 +1,9 @@
-package com.opencode.wrapper.service
+package it.ferdiu.opencodewrapper.service
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.opencode.wrapper.data.ServerConfigStore
+import it.ferdiu.opencodewrapper.data.ServerConfigStore
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

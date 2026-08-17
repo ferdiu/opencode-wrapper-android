@@ -1,4 +1,4 @@
-package com.opencode.wrapper.service
+package it.ferdiu.opencodewrapper.service
 
 import kotlin.math.min
 import kotlin.random.Random

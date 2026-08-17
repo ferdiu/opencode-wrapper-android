@@ -1,4 +1,4 @@
-package com.opencode.wrapper.data
+package it.ferdiu.opencodewrapper.data
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -27,7 +27,14 @@ data class ServerConfig(
  * disk in plaintext. The WebView gets cookies/session state from its own
  * cookie jar (see MainActivity); this store is what the background service
  * uses to authenticate independently of the WebView.
+ *
+ * Suppressing deprecation warnings because androidx.security:security-crypto is
+ * deprecated but still the most straightforward option for a small app that
+ * only needs to protect a single token; replacing it would pull in a larger
+ * dependency or require platform-level Keystore code that would meaningfully
+ * expand the project scope.
  */
+@Suppress("DEPRECATION")
 class ServerConfigStore(context: Context) {
 
     private val appContext = context.applicationContext

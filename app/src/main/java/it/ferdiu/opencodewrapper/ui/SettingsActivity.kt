@@ -1,14 +1,14 @@
-package com.opencode.wrapper.ui
+package it.ferdiu.opencodewrapper.ui
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.opencode.wrapper.R
-import com.opencode.wrapper.api.OpenCodeClientV2
-import com.opencode.wrapper.data.ServerConfig
-import com.opencode.wrapper.data.ServerConfigStore
-import com.opencode.wrapper.databinding.ActivitySettingsBinding
-import com.opencode.wrapper.service.OpenCodeEventService
+import it.ferdiu.opencodewrapper.R
+import it.ferdiu.opencodewrapper.api.OpenCodeClientV2
+import it.ferdiu.opencodewrapper.data.ServerConfig
+import it.ferdiu.opencodewrapper.data.ServerConfigStore
+import it.ferdiu.opencodewrapper.databinding.ActivitySettingsBinding
+import it.ferdiu.opencodewrapper.service.OpenCodeEventService
 import kotlinx.coroutines.launch
 
 /**

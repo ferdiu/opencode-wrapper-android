@@ -1,6 +1,7 @@
 <resources>
-    <string name="app_name">OpenCode Companion</string>
+    <string name="app_name">OpenCode</string>
     <string name="settings_title">Server Settings</string>
+    <string name="settings_subtitle">Connect to your OpenCode server</string>
 
     <string name="label_server_url">Server URL</string>
     <string name="hint_server_url">https://opencode.example.com or http://192.168.1.10:4096</string>

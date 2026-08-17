@@ -13,7 +13,7 @@ just makes sure you don't miss things while it's backgrounded.
 ## Project layout
 
 ```
-app/src/main/java/com/opencode/wrapper/
+app/src/main/java/it/ferdiu/opencodewrapper/
   api/            OpenCodeClient abstraction + the one real implementation
                   (OpenCodeClientV2) + tolerant event parsing (OcEvent)
   service/        Foreground service, reconnect/backoff policy, boot receiver

@@ -1,4 +1,4 @@
-package com.opencode.wrapper.api
+package it.ferdiu.opencodewrapper.api
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive

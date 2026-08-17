@@ -1,4 +1,4 @@
-package com.opencode.wrapper.ui
+package it.ferdiu.opencodewrapper.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -20,11 +20,11 @@ import android.webkit.WebViewClient
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.opencode.wrapper.R
-import com.opencode.wrapper.data.ServerConfig
-import com.opencode.wrapper.data.ServerConfigStore
-import com.opencode.wrapper.databinding.ActivityMainBinding
-import com.opencode.wrapper.service.OpenCodeEventService
+import it.ferdiu.opencodewrapper.R
+import it.ferdiu.opencodewrapper.data.ServerConfig
+import it.ferdiu.opencodewrapper.data.ServerConfigStore
+import it.ferdiu.opencodewrapper.databinding.ActivityMainBinding
+import it.ferdiu.opencodewrapper.service.OpenCodeEventService
 
 /**
  * Deliberately thin: loads the real OpenCode web app in a WebView and gets
@@ -85,7 +85,6 @@ class MainActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            databaseEnabled = true
             javaScriptCanOpenWindowsAutomatically = false
             mediaPlaybackRequiresUserGesture = false
         }

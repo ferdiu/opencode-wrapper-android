@@ -1,4 +1,4 @@
-package com.opencode.wrapper.service
+package it.ferdiu.opencodewrapper.service
 
 import android.content.Context
 import android.content.Intent
@@ -9,12 +9,12 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
-import com.opencode.wrapper.api.OpenCodeClient
-import com.opencode.wrapper.api.OpenCodeClientV2
-import com.opencode.wrapper.data.ServerConfig
-import com.opencode.wrapper.data.ServerConfigStore
-import com.opencode.wrapper.notifications.NotificationHelper
-import com.opencode.wrapper.notifications.NotificationRouter
+import it.ferdiu.opencodewrapper.api.OpenCodeClient
+import it.ferdiu.opencodewrapper.api.OpenCodeClientV2
+import it.ferdiu.opencodewrapper.data.ServerConfig
+import it.ferdiu.opencodewrapper.data.ServerConfigStore
+import it.ferdiu.opencodewrapper.notifications.NotificationHelper
+import it.ferdiu.opencodewrapper.notifications.NotificationRouter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -55,7 +55,7 @@ class OpenCodeEventService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
 
         val notification = NotificationHelper.buildServiceNotification(
-            this, getString(com.opencode.wrapper.R.string.service_notif_connecting)
+            this, getString(it.ferdiu.opencodewrapper.R.string.service_notif_connecting)
         )
         ServiceCompat.startForeground(
             this,
@@ -76,7 +76,7 @@ class OpenCodeEventService : LifecycleService() {
             while (true) {
                 val config = configStore.get()
                 if (config == null) {
-                    updateServiceNotification(getString(com.opencode.wrapper.R.string.service_notif_offline))
+                    updateServiceNotification(getString(it.ferdiu.opencodewrapper.R.string.service_notif_offline))
                     delay(5_000.milliseconds)
                     continue
                 }
@@ -88,14 +88,14 @@ class OpenCodeEventService : LifecycleService() {
                 // or right after a dropped connection).
                 runRecoveryPass(client)
 
-                updateServiceNotification(getString(com.opencode.wrapper.R.string.service_notif_title))
+                updateServiceNotification(getString(it.ferdiu.opencodewrapper.R.string.service_notif_title))
                 reconnectPolicy.reset()
 
                 val connectionEnded = runEventStream(client, config)
                 if (!connectionEnded) return@launch // service was stopped
 
                 val delayMs = reconnectPolicy.nextDelayMs()
-                updateServiceNotification(getString(com.opencode.wrapper.R.string.service_notif_reconnecting))
+                updateServiceNotification(getString(it.ferdiu.opencodewrapper.R.string.service_notif_reconnecting))
                 Log.i(TAG, "Reconnecting in ${delayMs}ms (attempt ${reconnectPolicy.currentAttempt})")
                 delay(delayMs.milliseconds)
             }

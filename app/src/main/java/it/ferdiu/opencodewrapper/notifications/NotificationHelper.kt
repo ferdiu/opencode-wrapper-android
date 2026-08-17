@@ -1,4 +1,4 @@
-package com.opencode.wrapper.notifications
+package it.ferdiu.opencodewrapper.notifications
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -8,8 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.opencode.wrapper.R
-import com.opencode.wrapper.ui.MainActivity
+import it.ferdiu.opencodewrapper.R
+import it.ferdiu.opencodewrapper.ui.MainActivity
 
 object NotificationHelper {
 

@@ -1,14 +1,14 @@
-package com.opencode.wrapper.notifications
+package it.ferdiu.opencodewrapper.notifications
 
 import android.content.Context
 import android.util.Log
-import com.opencode.wrapper.api.OcEvent
+import it.ferdiu.opencodewrapper.api.OcEvent
 
 /**
  * Turns live events into (at most) one Android notification each, per the
  * brief: "avoid notifying for every low-level streaming event or message
  * fragment." Message/part/lsp/pty/file events never reach here - see how
- * [com.opencode.wrapper.service.OpenCodeEventService] filters before calling
+ * [it.ferdiu.opencodewrapper.service.OpenCodeEventService] filters before calling
  * this router.
  *
  * Tracks per-session "was busy" state in memory only, purely to decide

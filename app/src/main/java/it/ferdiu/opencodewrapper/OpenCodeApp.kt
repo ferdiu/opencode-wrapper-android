@@ -1,7 +1,7 @@
-package com.opencode.wrapper
+package it.ferdiu.opencodewrapper
 
 import android.app.Application
-import com.opencode.wrapper.notifications.NotificationHelper
+import it.ferdiu.opencodewrapper.notifications.NotificationHelper
 
 class OpenCodeApp : Application() {
     override fun onCreate() {

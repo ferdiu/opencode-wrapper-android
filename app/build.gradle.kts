@@ -1,15 +1,14 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
-    namespace = "com.opencode.wrapper"
+    namespace = "it.ferdiu.opencodewrapper"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.opencode.wrapper"
+        applicationId = "it.ferdiu.opencodewrapper"
         minSdk = 26 // Foreground service types + notification channels need 26+
         targetSdk = 35
         versionCode = 1

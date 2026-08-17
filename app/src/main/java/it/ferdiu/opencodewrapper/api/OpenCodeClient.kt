@@ -1,4 +1,4 @@
-package com.opencode.wrapper.api
+package it.ferdiu.opencodewrapper.api
 
 import kotlinx.coroutines.flow.Flow
 
@@ -16,7 +16,7 @@ interface OpenCodeClient {
     /**
      * Opens the live event stream. Emits [OcEvent]s until cancelled or the
      * connection drops (in which case the flow completes/throws and the
-     * caller - [com.opencode.wrapper.service.OpenCodeEventService] - is
+     * caller - [it.ferdiu.opencodewrapper.service.OpenCodeEventService] - is
      * responsible for reconnect/backoff).
      *
      * @param sessionId if non-null, uses the V2 session-scoped filtering
