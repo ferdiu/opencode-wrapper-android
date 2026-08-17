@@ -6,9 +6,40 @@ event connection alive independently of the WebView, delivering native
 Android notifications for things that actually need your attention
 (permission requests, agent questions, session completion, session errors).
 
-It deliberately does **not** reimplement the OpenCode UI, cache
-conversations, or work offline. The web app remains the primary UI; this app
-just makes sure you don't miss things while it's backgrounded.
+## What this app is — and what it is not
+
+**This app IS:**
+
+- A thin native wrapper around the **real OpenCode web UI**, for people who
+  like that UI and just want it on their phone.
+- A **notification bridge**: a foreground service subscribes to your server's
+  event stream and turns permission requests, agent questions, session
+  completion, and errors into native Android notifications — even when the
+  app is closed.
+- A deep-link launcher: tapping a notification drops you straight into the
+  relevant session in the WebView.
+
+**This app IS NOT:**
+
+- A reimplementation of the OpenCode UI — no native session/message/diff
+  views, by design.
+- A client with its own conversation storage — nothing is cached or synced;
+  no offline mode.
+- A full-featured mobile OpenCode client.
+
+**Looking for something more feature-rich?** If you want a full native
+client experience (session management, message rendering, diffs, etc.),
+take a look at projects like [OpenChamber](https://github.com/btriapitsyn/openchamber)
+instead. This app intentionally stays minimal: it's for those who really
+like the OpenCode web UI and only want native notification support on top
+of it.
+
+## Affiliation
+
+This is an independent, community project. It is **not built by the
+OpenCode team and is not affiliated with or endorsed by OpenCode in any
+way**. "OpenCode" in the app name refers solely to the self-hosted server
+it connects to.
 
 ## Project layout
 
@@ -31,44 +62,37 @@ should need to change.
 ## What I verified against the actual v1.18.18 source, and what I had to assume
 
 I inspected the `anomalyco/opencode` repository (the project moved from
-`sst/opencode` to `anomalyco/opencode` on GitHub) at the `v1.18.18` tag,
-its generated SDK types (`packages/sdk/js/src/gen/types.gen.ts`), and
-documentation of the v2 SDK/OpenAPI surface, rather than assuming the
-protocol from memory or from older OpenCode versions. Here's what's
-confirmed vs. what's a documented best guess:
+`sst/opencode` to `anomalyco/opencode` on GitHub) at the `v1.18.18` tag —
+including the SSE route handlers
+(`server/routes/instance/httpapi/handlers/{event,global}.ts`) — and the
+generated v2 SDK types (`packages/sdk/js/src/v2/gen/types.gen.ts`), rather
+than assuming the protocol from memory or from older OpenCode versions.
+Here's what's confirmed vs. what's a documented best guess:
 
 **Confirmed:**
 - `GET /global/health` — liveness/version check.
-- `GET /event` — instance-scoped SSE stream (this is the endpoint to use;
-  `GET /global/event` is the legacy, cross-instance endpoint and is
-  deliberately *not* used here).
-- Adding `?session={sessionID}` to `GET /event` filters the stream to that
-  session's events plus connection-level `server.*` events. This filter was
-  added specifically for `@opencode-ai/sdk/v2` (upstream PR #6729 says
-  "`@opencode-ai/sdk/v2` — Fully supported"). **This is what "the V2 event
-  API" concretely means in v1.18.18** — there isn't a separate `/v2/event`
-  URL. `OpenCodeClientV2.events()` exposes this via an optional `sessionId`
-  parameter, though the service currently subscribes unfiltered
-  (`sessionId = null`) so it catches events across every session on the
-  instance.
+- `GET /global/event` — root-scoped SSE stream fed by the server's
+  `GlobalBus`, forwarding events from **all** project instances. **This is
+  the endpoint the app subscribes to.** The instance-scoped `GET /event`
+  silently filters events server-side to a single instance directory
+  (`event.location?.directory === instance.directory`, resolved from a
+  `directory` query param), so without a directory the stream delivers only
+  `server.connected`/heartbeats and no session events at all.
+- Global-stream payloads arrive wrapped in an envelope
+  (`{"directory": ..., "payload": {"id", "type", "properties"}}`), which
+  `OcEventParser` unwraps.
+- The event payloads themselves use the v2 schema:
+  `permission.asked` → `properties = {id, sessionID, permission, patterns, ...}`;
+  `question.asked` → `properties = {id, sessionID, questions: [{question, header, options, ...}]}`;
+  `session.status` → `properties = {sessionID, status: {type: idle|busy|retry, ...}}`.
+  Anything unrecognized becomes a harmless `Unknown` event instead of
+  breaking the connection. **If a future server version changes this, the
+  one file to fix is `api/OcEvent.kt`.**
 - `GET /session`, `GET /session/status`, `GET /session/{id}` — session
   listing/status/detail, used for the app's minimal persisted-state needs
   and reconnect recovery.
-- The SSE payload shape: `{"type": "...", "properties": {...}}`, with a
-  `server.connected` event sent immediately on connect and periodic
-  heartbeats.
 
 **Explicitly *not* verified / best-effort, called out in code comments:**
-- **Event naming for permission/question events.** The v1 SDK types use
-  `permission.updated` / `permission.replied`. Secondary documentation of
-  the v2 unified `Event` type also references `permission.asked` and
-  `question.asked` as separate members, but I wasn't able to fetch the full
-  v2 `types.gen.ts` to confirm the exact shape. `OcEventParser` recognizes
-  **both** naming schemes for permission events and handles `question.asked`
-  if present; anything it doesn't recognize becomes a harmless `Unknown`
-  event instead of breaking the connection. **If you're on a server where
-  this doesn't match, this is the one file to fix:
-  `api/OcEvent.kt`.**
 - **Durable replay/cursor endpoint.** I could not find a documented,
   stable "durable event log with a replay cursor" distinct from session
   status/detail. So reconnect recovery here is: reconnect the SSE stream,
@@ -121,18 +145,13 @@ confirmed vs. what's a documented best guess:
 
 ## Building
 
-Standard Gradle Android project targeting `compileSdk 35`, `minSdk 26`
+Standard Gradle Android project targeting `compileSdk 37`, `minSdk 26`
 (foreground service types and notification channels both need API 26+).
 
-Easiest path: open the project root in Android Studio (Koala or newer) and
-let it sync/generate the Gradle wrapper automatically, then Run.
-
-Command line: the wrapper jar/scripts aren't included in this archive
-(binary, and not generatable without network access here) — generate them
-once with a local Gradle install, then use `./gradlew` as normal:
+Easiest path: open the project root in Android Studio and let it sync, then
+Run. From the command line:
 
 ```
-gradle wrapper --gradle-version 8.9
 ./gradlew assembleDebug
 ```
 
