@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build the release for (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease
+
+      # Signing: if repository secrets are configured (KEYSTORE_BASE64,
+      # KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) the APK is signed with
+      # your real release key. Otherwise an ephemeral CI keystore is
+      # generated so the APK is installable — note that its signature will
+      # differ between runs, so upgrades require uninstalling first.
+      - name: Sign APK
+        run: |
+          APK=$(ls app/build/outputs/apk/release/app-release-unsigned.apk)
+          OUT=app/build/outputs/apk/release/app-release.apk
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > /tmp/keystore.jks
+            STORE_PASS="${{ secrets.KEYSTORE_PASSWORD }}"
+            KEY_ALIAS="${{ secrets.KEY_ALIAS }}"
+            KEY_PASS="${{ secrets.KEY_PASSWORD }}"
+            SIGNING=release-key
+          else
+            keytool -genkeypair -v -keystore /tmp/keystore.jks \
+              -alias ci -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android-ci -keypass android-ci \
+              -dname "CN=CI Ephemeral, OU=CI, O=OpenCodeWrapper, C=IT"
+            STORE_PASS=android-ci
+            KEY_ALIAS=ci
+            KEY_PASS=android-ci
+            SIGNING=ephemeral-ci-key
+          fi
+          "$ANDROID_HOME/build-tools/"*/apksigner sign \
+            --ks /tmp/keystore.jks --ks-pass "pass:$STORE_PASS" \
+            --key-pass "pass:$KEY_PASS" --ks-key-alias "$KEY_ALIAS" \
+            --out "$OUT" "$APK"
+          echo "SIGNING=$SIGNING" >> "$GITHUB_ENV"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+
+      - name: Resolve tag name
+        run: echo "TAG_NAME=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
+          files: ${{ env.APK_PATH }}
+          body: |
+            Android APK for ${{ env.TAG_NAME }}.
+
+            Signed with: `${{ env.SIGNING }}`.
+
+            > ⚠️ If `ephemeral-ci-key` is shown above, the APK was signed with
+            > a throwaway CI key: installing over a previous CI build requires
+            > uninstalling first. For stable upgrade signatures, configure the
+            > `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and
+            > `KEY_PASSWORD` repository secrets.
