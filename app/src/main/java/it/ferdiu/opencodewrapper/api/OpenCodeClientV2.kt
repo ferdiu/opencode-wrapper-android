@@ -18,6 +18,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -164,11 +165,14 @@ class OpenCodeClientV2(
         sessionId: String,
         requestId: String,
         decision: PermissionDecision,
+        directory: String?,
     ): Boolean = runCatching {
         // Verified against live server v1.18.31: legacy global endpoint,
-        // field "reply". sessionId is part of the interface for future
-        // v2-scoped endpoints; the legacy path doesn't need it.
-        val url = "${config.normalizedBaseUrl}/permission/$requestId/reply"
+        // field "reply". The directory query parameter is REQUIRED on
+        // multi-project servers - without it the server resolves against
+        // the default instance and 404s with PermissionNotFoundError.
+        // sessionId is part of the interface for future v2-scoped endpoints.
+        val url = scopedReplyUrl("permission", requestId, directory)
         val payload = buildJsonObject {
             put("reply", decision.apiValue)
         }.toString()
@@ -182,12 +186,14 @@ class OpenCodeClientV2(
         sessionId: String,
         requestId: String,
         answer: String,
+        directory: String?,
     ): Boolean = runCatching {
         // Verified against live server v1.18.31: legacy global endpoint,
         // body {"answers": [[answer]]} (answers is an array of string-arrays).
-        // sessionId is part of the interface for future v2-scoped endpoints;
-        // the legacy path doesn't need it.
-        val url = "${config.normalizedBaseUrl}/question/$requestId/reply"
+        // The directory query parameter scopes the call to the project
+        // instance that raised the request (see replyPermission).
+        // sessionId is part of the interface for future v2-scoped endpoints.
+        val url = scopedReplyUrl("question", requestId, directory)
         val payload = buildJsonObject {
             putJsonArray("answers") {
                 addJsonArray {
@@ -200,6 +206,14 @@ class OpenCodeClientV2(
             .build()
         executeAsync(request).use { it.isSuccessful }
     }.getOrDefault(false)
+
+    private fun scopedReplyUrl(kind: String, requestId: String, directory: String?): String =
+        "${config.normalizedBaseUrl}/$kind/$requestId/reply"
+            .toHttpUrl()
+            .newBuilder()
+            .apply { if (directory != null) addQueryParameter("directory", directory) }
+            .build()
+            .toString()
 
     private fun sessionSnapshotFromInfo(obj: JsonObject): SessionSnapshot {
         val id = obj["id"]?.jsonPrimitive?.content

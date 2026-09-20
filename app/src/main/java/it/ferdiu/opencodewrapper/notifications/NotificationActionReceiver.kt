@@ -54,24 +54,26 @@ class NotificationActionReceiver : BroadcastReceiver() {
     private fun sendPermissionReply(context: Context, intent: Intent, decision: PermissionDecision) {
         val permissionId = intent.getStringExtra(EXTRA_SUBJECT_ID) ?: return
         val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return
+        val directory = intent.getStringExtra(EXTRA_DIRECTORY)
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, NotificationHelper.permissionNotificationId(permissionId))
 
         sendReply(context, notificationId, repost = { note ->
             repostPermission(context, intent, note)
         }) { config ->
-            OpenCodeClientV2(config).replyPermission(sessionId, permissionId, decision)
+            OpenCodeClientV2(config).replyPermission(sessionId, permissionId, decision, directory)
         }
     }
 
     private fun sendQuestionReply(context: Context, intent: Intent, answer: String) {
         val requestId = intent.getStringExtra(EXTRA_SUBJECT_ID) ?: return
         val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return
+        val directory = intent.getStringExtra(EXTRA_DIRECTORY)
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, NotificationHelper.questionNotificationId(requestId))
 
         sendReply(context, notificationId, repost = { note ->
             repostQuestion(context, intent, note)
         }) { config ->
-            OpenCodeClientV2(config).replyQuestion(sessionId, requestId, answer)
+            OpenCodeClientV2(config).replyQuestion(sessionId, requestId, answer, directory)
         }
     }
 

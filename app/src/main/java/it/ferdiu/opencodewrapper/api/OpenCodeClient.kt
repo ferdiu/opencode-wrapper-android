@@ -46,22 +46,32 @@ interface OpenCodeClient {
      * Replies to a pending permission request. Returns true when the server
      * accepted the reply (2xx). Used by the notification action receiver so
      * the user can answer permission prompts without opening the app.
+     *
+     * [directory] scopes the call to the project instance that raised the
+     * request - required on multi-project servers (verified against live
+     * v1.18.31: without it the reply 404s with PermissionNotFoundError when
+     * the request belongs to a non-default instance).
      */
     suspend fun replyPermission(
         sessionId: String,
         requestId: String,
         decision: PermissionDecision,
+        directory: String?,
     ): Boolean
 
     /**
      * Submits a free-form answer to a pending question. Returns true on 2xx.
      * The answer is the user's whole reply text (typed inline or dictated on
      * Android Auto) - no parsing involved.
+     *
+     * [directory] scopes the call to the project instance that raised the
+     * request (same multi-project reason as [replyPermission]).
      */
     suspend fun replyQuestion(
         sessionId: String,
         requestId: String,
         answer: String,
+        directory: String?,
     ): Boolean
 }
 
