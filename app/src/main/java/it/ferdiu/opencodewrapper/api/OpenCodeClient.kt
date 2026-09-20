@@ -52,6 +52,17 @@ interface OpenCodeClient {
         requestId: String,
         decision: PermissionDecision,
     ): Boolean
+
+    /**
+     * Submits a free-form answer to a pending question. Returns true on 2xx.
+     * The answer is the user's whole reply text (typed inline or dictated on
+     * Android Auto) - no parsing involved.
+     */
+    suspend fun replyQuestion(
+        sessionId: String,
+        requestId: String,
+        answer: String,
+    ): Boolean
 }
 
 data class SessionSnapshot(

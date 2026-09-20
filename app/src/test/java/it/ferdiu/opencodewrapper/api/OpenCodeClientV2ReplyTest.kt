@@ -44,4 +44,24 @@ class OpenCodeClientV2ReplyTest {
         server.enqueue(MockResponse().setResponseCode(404))
         assertFalse(client().replyPermission("ses_1", "per_x", PermissionDecision.REJECT))
     }
+
+    @Test
+    fun `reply question posts the answer to the reply endpoint`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+
+        val ok = client().replyQuestion("ses_1", "req_1", "the blue one")
+
+        assertTrue(ok)
+        val recorded = server.takeRequest()
+        assertEquals("POST", recorded.method)
+        // Verified shape (Task 1): global legacy endpoint.
+        assertEquals("/question/req_1/reply", recorded.path)
+        assertTrue(recorded.body.readUtf8().contains("the blue one"))
+    }
+
+    @Test
+    fun `reply question returns false on http error`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(409))
+        assertFalse(client().replyQuestion("ses_1", "req_x", "answer"))
+    }
 }

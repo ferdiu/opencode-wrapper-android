@@ -8,11 +8,14 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -162,6 +165,29 @@ class OpenCodeClientV2(
         val url = "${config.normalizedBaseUrl}/permission/$requestId/reply"
         val payload = buildJsonObject {
             put("reply", decision.apiValue)
+        }.toString()
+        val request = authedRequest(url)
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        executeAsync(request).use { it.isSuccessful }
+    }.getOrDefault(false)
+
+    override suspend fun replyQuestion(
+        sessionId: String,
+        requestId: String,
+        answer: String,
+    ): Boolean = runCatching {
+        // Verified against live server v1.18.31: legacy global endpoint,
+        // body {"answers": [[answer]]} (answers is an array of string-arrays).
+        // sessionId is part of the interface for future v2-scoped endpoints;
+        // the legacy path doesn't need it.
+        val url = "${config.normalizedBaseUrl}/question/$requestId/reply"
+        val payload = buildJsonObject {
+            putJsonArray("answers") {
+                addJsonArray {
+                    add(answer)
+                }
+            }
         }.toString()
         val request = authedRequest(url)
             .post(payload.toRequestBody("application/json".toMediaType()))
