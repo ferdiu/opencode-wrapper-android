@@ -26,8 +26,8 @@ device even when the app is closed.
 
 ## Build & Test
 
-- Build: `./gradlew assembleDebug`
-- Full check: `./gradlew build`
+- Build: `export JAVA_HOME=/usr/lib/jvm/temurin-25-jdk; ./gradlew assembleDebug`
+- Full check: `export JAVA_HOME=/usr/lib/jvm/temurin-25-jdk; ./gradlew build`
 - Release is minified (ProGuard); keep keep-rules in `app/proguard-rules.pro` when adding reflection/serialization.
 
 ## Conventions
