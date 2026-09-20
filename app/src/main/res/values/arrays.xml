@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Car hosts allowed to connect in release builds. "com.google.android.projection.gearhead"
+         is the Android Auto app (phone projection). AAOS system hosts are admitted separately
+         by HostValidator via their privileged TEMPLATE_RENDERER permission. Package names are
+         verified against the connecting UID by the PackageManager, so a different app cannot
+         impersonate the listed host. -->
+    <string-array name="hosts_allowlist">
+        <item>com.google.android.projection.gearhead</item>
+    </string-array>
+</resources>
