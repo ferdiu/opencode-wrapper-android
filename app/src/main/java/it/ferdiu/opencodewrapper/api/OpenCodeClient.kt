@@ -93,6 +93,12 @@ interface OpenCodeClient {
      *  Verified live: POST /session/{id}/message {parts:[...]}.
      *  [directory] scopes to the right instance. */
     suspend fun sendPrompt(sessionId: String, text: String, directory: String?): Boolean
+
+    /** Currently pending permission requests for a session, oldest first.
+     *  [directory] scopes to the session's project instance (verified live:
+     *  unscoped calls only see the default instance). Empty on any failure -
+     *  the readout screen simply shows the message variant. */
+    suspend fun listPendingPermissions(sessionId: String, directory: String?): List<PendingPermission>
 }
 
 data class SessionSnapshot(
@@ -118,4 +124,10 @@ data class OcSession(
     val directory: String?,
     /** time.updated epoch millis; 0 when absent. Used for newest-first sort. */
     val updatedAt: Long = 0,
+)
+
+data class PendingPermission(
+    val id: String,
+    /** Human-readable label: "permission: firstPattern", or just the permission name. */
+    val label: String,
 )

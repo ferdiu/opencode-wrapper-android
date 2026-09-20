@@ -96,4 +96,34 @@ class OpenCodeClientV2SessionsTest {
         server.enqueue(MockResponse().setResponseCode(500))
         assertFalse(client().sendPrompt("ses_1", "x", null))
     }
+
+    @Test
+    fun `pending permissions map id and label filtered by session id`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """
+            [
+              { "id": "per_1", "sessionID": "ses_1", "permission": "bash", "patterns": ["rm -rf build/"] },
+              { "id": "per_9", "sessionID": "ses_other", "permission": "bash", "patterns": ["other"] },
+              { "id": "per_2", "sessionID": "ses_1", "permission": "edit", "patterns": [] }
+            ]
+            """.trimIndent()
+        ))
+        val pending = client().listPendingPermissions("ses_1", "/home/dev/shop-api")
+        assertEquals(listOf(PendingPermission("per_1", "bash: rm -rf build/"), PendingPermission("per_2", "edit")), pending)
+        val recorded = server.takeRequest()
+        assertEquals("/permission", recorded.requestUrl!!.encodedPath)
+        assertEquals("/home/dev/shop-api", recorded.requestUrl!!.queryParameter("directory"))
+    }
+
+    @Test
+    fun `pending permissions empty when none`() = runTest {
+        server.enqueue(MockResponse().setBody("[]"))
+        assertEquals(emptyList<PendingPermission>(), client().listPendingPermissions("ses_1", null))
+    }
+
+    @Test
+    fun `pending permissions empty on http error`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(500))
+        assertEquals(emptyList<PendingPermission>(), client().listPendingPermissions("ses_1", null))
+    }
 }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonArray
 import kotlinx.serialization.json.addJsonObject
@@ -290,6 +291,46 @@ class OpenCodeClientV2(
             .build()
         executeAsync(request).use { it.isSuccessful }
     }.getOrDefault(false)
+
+    override suspend fun listPendingPermissions(sessionId: String, directory: String?): List<PendingPermission> = runCatching {
+        // Verified live: GET /permission?directory=<worktree> returns a bare
+        // array of pending requests; the directory parameter is what makes
+        // non-default project instances visible (same scoping as replies).
+        val httpUrl = "${config.normalizedBaseUrl}/permission".toHttpUrl().newBuilder()
+            .apply { if (directory != null) addQueryParameter("directory", directory) }
+            .build()
+        val request = authedRequest(httpUrl.toString()).build()
+        val body = executeAsync(request).use { resp ->
+            if (!resp.isSuccessful) return emptyList()
+            resp.body.string()
+        }
+        if (body.isEmpty()) return emptyList()
+        val root = json.parseToJsonElement(body)
+        if (root !is kotlinx.serialization.json.JsonArray) return emptyList()
+        root.filter { entry ->
+            // JsonNull.content returns the literal "null" (see ocSessionFromInfo),
+            // so nulls are filtered out before reading the primitive.
+            (entry as? JsonObject)?.get("sessionID")
+                ?.takeIf { it !is JsonNull }
+                ?.jsonPrimitive?.contentOrNull() == sessionId
+        }
+            .mapNotNull { runCatching { pendingPermissionFromInfo(it.jsonObject) }.getOrNull() }
+    }.getOrDefault(emptyList())
+
+    private fun pendingPermissionFromInfo(obj: JsonObject): PendingPermission {
+        val id = obj["id"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+            ?: error("missing permission id")
+        val permission = runCatching {
+            obj["permission"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+        }.getOrNull() ?: "permission"
+        val firstPattern = (obj["patterns"] as? kotlinx.serialization.json.JsonArray)
+            ?.firstOrNull()
+            ?.takeIf { it !is JsonNull }
+            ?.let { (it as? JsonPrimitive)?.contentOrNull() }
+        return PendingPermission(id, if (firstPattern != null) "$permission: $firstPattern" else permission)
+    }
+
+    private fun JsonPrimitive.contentOrNull(): String? = runCatching { content }.getOrNull()
 
     private fun ocSessionFromInfo(obj: JsonObject): OcSession {
         val id = obj["id"]?.jsonPrimitive?.content ?: error("missing session id")
