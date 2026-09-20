@@ -118,13 +118,12 @@ class ReadoutScreen(
         val who = if (message.isFromUser) "You said" else "Assistant said"
         return PaneTemplate.Builder(
             Pane.Builder()
+                // PaneTemplate rows must not have click listeners (host
+                // constraint) - full text is reached via the action below.
                 .addRow(
                     Row.Builder()
                         .setTitle(who)
                         .addText(message.text)
-                        .setOnClickListener {
-                            screenManager.push(FullTextScreen(carContext, who, message.text))
-                        }
                         .build()
                 )
                 .addAction(
@@ -138,6 +137,14 @@ class ReadoutScreen(
                         .setTitle("Reply")
                         .setOnClickListener {
                             screenManager.push(DictationScreen(carContext, speaker, session))
+                        }
+                        .build()
+                )
+                .addAction(
+                    Action.Builder()
+                        .setTitle("Full text")
+                        .setOnClickListener {
+                            screenManager.push(FullTextScreen(carContext, who, message.text))
                         }
                         .build()
                 )
