@@ -67,6 +67,9 @@ dependencies {
     // Backup path for reconnect nudges if the OS kills the foreground service.
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 
+    // Android Auto car-screen app (projected from the phone; no phone UI changes).
+    implementation("androidx.car.app:app:1.7.0")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
