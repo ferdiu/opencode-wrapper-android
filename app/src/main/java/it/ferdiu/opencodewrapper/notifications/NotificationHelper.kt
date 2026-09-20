@@ -193,10 +193,15 @@ object NotificationHelper {
 
         val notificationId = permissionNotificationId(permissionId)
 
+        // Notification IDs are 15-bit hashes, so two colliding subjects share
+        // one notification ID (they degrade to a single shared notification,
+        // which is acceptable) - but request codes must fold in the FULL
+        // subject hash so FLAG_UPDATE_CURRENT never overwrites one
+        // notification's action extras with another's.
         fun decisionPendingIntent(decision: PermissionDecision, slot: Int): PendingIntent =
             PendingIntent.getBroadcast(
                 context,
-                notificationId * 8 + slot,
+                notificationId * 8 + slot + permissionId.hashCode(),
                 NotificationActionReceiver.decisionIntent(
                     context, permissionId, sessionId, commandLabel, sessionLabel, directory, decision, notificationId,
                 ),
@@ -211,7 +216,7 @@ object NotificationHelper {
             .build()
         val voiceIntent = PendingIntent.getBroadcast(
             context,
-            notificationId * 8,
+            notificationId * 8 + permissionId.hashCode(),
             NotificationActionReceiver.voiceReplyIntent(
                 context, permissionId, sessionId, commandLabel, sessionLabel, directory, notificationId,
             ),
@@ -271,7 +276,7 @@ object NotificationHelper {
             .build()
         val answerIntent = PendingIntent.getBroadcast(
             context,
-            notificationId,
+            notificationId + requestId.hashCode(),
             NotificationActionReceiver.questionAnswerIntent(
                 context, requestId, sessionId, prompt, sessionLabel, directory, notificationId,
             ),

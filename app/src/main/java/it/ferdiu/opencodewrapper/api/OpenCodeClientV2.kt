@@ -75,6 +75,12 @@ class OpenCodeClientV2(
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    /** Bounded client for one-shot REST calls (replies, snapshots, health).
+     *  The infinite-timeout [http] stays dedicated to the SSE stream only. */
+    private val restHttp = http.newBuilder()
+        .callTimeout(REST_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build()
+
     override fun events(): Flow<OcEnvelope> = callbackFlow {
         // /global/event (root scope) forwards ALL instance events on the
         // GlobalBus, regardless of project directory. The instance-scoped
@@ -222,7 +228,7 @@ class OpenCodeClientV2(
     }
 
     private suspend fun executeAsync(request: Request): Response = suspendCancellableCoroutine { cont ->
-        val call = http.newCall(request)
+        val call = restHttp.newCall(request)
         cont.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -237,6 +243,7 @@ class OpenCodeClientV2(
 
     companion object {
         private const val TAG = "OpenCodeClientV2"
+        private const val REST_CALL_TIMEOUT_SECONDS = 30L
 
         fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
             // SSE connections are long-lived by design; disable the read

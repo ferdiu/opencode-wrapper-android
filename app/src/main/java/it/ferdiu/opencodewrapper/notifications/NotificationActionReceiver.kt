@@ -56,7 +56,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, NotificationHelper.permissionNotificationId(permissionId))
 
-        sendReply(context, notificationId, repost = { repostPermission(context, intent, context.getString(R.string.notif_reply_failed)) }) { config ->
+        sendReply(context, notificationId, repost = { note ->
+            repostPermission(context, intent, note)
+        }) { config ->
             OpenCodeClientV2(config).replyPermission(sessionId, permissionId, decision)
         }
     }
@@ -66,7 +68,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, NotificationHelper.questionNotificationId(requestId))
 
-        sendReply(context, notificationId, repost = { repostQuestion(context, intent, context.getString(R.string.notif_reply_failed)) }) { config ->
+        sendReply(context, notificationId, repost = { note ->
+            repostQuestion(context, intent, note)
+        }) { config ->
             OpenCodeClientV2(config).replyQuestion(sessionId, requestId, answer)
         }
     }
@@ -75,7 +79,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
     private fun sendReply(
         context: Context,
         notificationId: Int,
-        repost: () -> Unit,
+        repost: (note: String) -> Unit,
         call: suspend (config: ServerConfig) -> Boolean,
     ) {
         val pendingResult = goAsync()
@@ -86,12 +90,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 if (ok) {
                     NotificationHelper.cancelNotification(context, notificationId)
                 } else {
-                    if (config == null) Log.w(TAG, "No server config; cannot send reply")
-                    repost()
+                    repost(
+                        if (config == null) context.getString(R.string.notif_no_server)
+                        else context.getString(R.string.notif_reply_failed)
+                    )
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Reply failed", e)
-                repost()
+                repost(context.getString(R.string.notif_reply_failed))
             } finally {
                 pendingResult.finish()
             }
