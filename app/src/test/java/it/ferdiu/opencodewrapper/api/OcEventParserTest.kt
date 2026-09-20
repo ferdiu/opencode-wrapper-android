@@ -154,4 +154,68 @@ class OcEventParserTest {
         val event = parse("""{"type":"pty.created","properties":{"info":{}}}""")
         assertTrue(event is OcEvent.Unknown)
     }
+
+    @Test
+    fun `permission replied parses id and session`() {
+        val event = parse(
+            """
+            { "type": "permission.replied",
+              "properties": { "sessionID": "ses_9", "requestID": "per_9" } }
+            """.trimIndent()
+        )
+        assertTrue(event is OcEvent.PermissionReplied)
+        event as OcEvent.PermissionReplied
+        assertEquals("per_9", event.permissionId)
+        assertEquals("ses_9", event.sessionId)
+    }
+
+    @Test
+    fun `question replied parses as settled`() {
+        val event = parse(
+            """
+            { "type": "question.replied",
+              "properties": { "sessionID": "ses_9", "requestID": "req_9" } }
+            """.trimIndent()
+        )
+        assertTrue(event is OcEvent.QuestionSettled)
+        event as OcEvent.QuestionSettled
+        assertEquals("req_9", event.requestId)
+        assertEquals("ses_9", event.sessionId)
+    }
+
+    @Test
+    fun `question rejected also parses as settled`() {
+        val event = parse(
+            """
+            { "type": "question.rejected",
+              "properties": { "sessionID": "ses_9", "requestID": "req_10" } }
+            """.trimIndent()
+        )
+        assertTrue(event is OcEvent.QuestionSettled)
+        assertEquals("req_10", (event as OcEvent.QuestionSettled).requestId)
+    }
+
+    @Test
+    fun `session deleted parses session id`() {
+        val event = parse(
+            """
+            { "type": "session.deleted",
+              "properties": { "sessionID": "ses_7" } }
+            """.trimIndent()
+        )
+        assertTrue(event is OcEvent.SessionDeleted)
+        assertEquals("ses_7", (event as OcEvent.SessionDeleted).sessionId)
+    }
+
+    @Test
+    fun `session deleted with info wrapper parses session id`() {
+        val event = parse(
+            """
+            { "type": "session.deleted",
+              "properties": { "info": { "id": "ses_8" } } }
+            """.trimIndent()
+        )
+        assertTrue(event is OcEvent.SessionDeleted)
+        assertEquals("ses_8", (event as OcEvent.SessionDeleted).sessionId)
+    }
 }

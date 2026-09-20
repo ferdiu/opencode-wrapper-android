@@ -41,6 +41,20 @@ sealed class OcEvent {
         val prompt: String?,
     ) : OcEvent()
 
+    data class PermissionReplied(
+        val permissionId: String,
+        val sessionId: String,
+    ) : OcEvent()
+
+    /** The question was answered or dismissed (possibly on another client) -
+     *  either way the notification should come down. */
+    data class QuestionSettled(
+        val requestId: String,
+        val sessionId: String,
+    ) : OcEvent()
+
+    data class SessionDeleted(val sessionId: String) : OcEvent()
+
     data class SessionUpdated(val sessionId: String, val title: String?) : OcEvent()
 
     /** Anything we don't have a specific case for - kept so future OpenCode
@@ -135,6 +149,30 @@ object OcEventParser {
                                 ?: (q as? JsonObject)?.stringOrNull("header")
                         }
                 OcEvent.QuestionAsked(id, sid, prompt)
+            }
+
+            // Verified: properties = { sessionID, requestID, reply }.
+            "permission.replied" -> {
+                val id = props.stringOrNull("requestID") ?: props.stringOrNull("permissionID") ?: props.stringOrNull("id")
+                val sid = props.stringOrNull("sessionID")
+                if (id == null || sid == null) return OcEvent.Unknown(type, json)
+                OcEvent.PermissionReplied(id, sid)
+            }
+
+            // Verified: properties = { sessionID, requestID, answers? }.
+            "question.replied", "question.rejected" -> {
+                val id = props.stringOrNull("requestID") ?: props.stringOrNull("id")
+                val sid = props.stringOrNull("sessionID")
+                if (id == null || sid == null) return OcEvent.Unknown(type, json)
+                OcEvent.QuestionSettled(id, sid)
+            }
+
+            // Verified: properties = { sessionID, info } (info.id kept as fallback).
+            "session.deleted" -> {
+                val sid = props.stringOrNull("sessionID")
+                    ?: (props["info"] as? JsonObject)?.stringOrNull("id")
+                    ?: return OcEvent.Unknown(type, json)
+                OcEvent.SessionDeleted(sid)
             }
 
             "session.updated", "session.created" -> {

@@ -105,7 +105,8 @@ class NotificationRouter(private val context: Context) {
                 )
             }
 
-            is OcEvent.Connected, is OcEvent.Heartbeat, is OcEvent.Unknown -> {
+            is OcEvent.Connected, is OcEvent.Heartbeat, is OcEvent.Unknown,
+            is OcEvent.PermissionReplied, is OcEvent.QuestionSettled, is OcEvent.SessionDeleted -> {
                 // No user-facing notification for connection bookkeeping or
                 // event types we don't specifically model.
             }
