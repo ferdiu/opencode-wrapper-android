@@ -27,14 +27,14 @@ class OpenCodeClientV2SessionsTest {
         server.enqueue(MockResponse().setBody(
             """
             [
-              { "id": "abc", "worktree": "/home/dev/shop-api", "vcs": "git" },
+              { "id": "abc", "worktree": "/home/dev/shop-api", "vcs": "git", "icon": { "color": "mint" } },
               { "id": "global", "worktree": "/" }
             ]
             """.trimIndent()
         ))
         val projects = client().listProjects()
         assertEquals(
-            listOf(OcProject("abc", "/home/dev/shop-api", "shop-api"), OcProject("global", "/", "Global")),
+            listOf(OcProject("abc", "/home/dev/shop-api", "shop-api", iconColor = "mint"), OcProject("global", "/", "Global", iconColor = null)),
             projects
         )
     }
@@ -56,6 +56,47 @@ class OpenCodeClientV2SessionsTest {
         val recorded = server.takeRequest()
         assertEquals("/session", recorded.requestUrl!!.encodedPath)
         assertEquals("/home/dev/shop-api", recorded.requestUrl!!.queryParameter("directory"))
+    }
+
+    @Test
+    fun `list sessions filters out sub-agent and archived sessions`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """
+            [
+              { "id": "ses_sub", "title": "Sub task", "directory": "/home/dev/shop-api", "parentID": "ses_parent" },
+              { "id": "ses_arch", "title": "Old work", "directory": "/home/dev/shop-api", "time": { "updated": 1, "archived": 2 } },
+              { "id": "ses_clean", "title": "Fix login bug", "directory": "/home/dev/shop-api", "time": { "updated": 3 } }
+            ]
+            """.trimIndent()
+        ))
+        val sessions = client().listSessions(directory = "/home/dev/shop-api")
+        assertEquals(listOf("ses_clean"), sessions.map { it.id })
+    }
+
+    @Test
+    fun `list session statuses maps ids to type scoped by directory`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """
+            { "ses_1": { "type": "busy" }, "ses_2": { "type": "idle" } }
+            """.trimIndent()
+        ))
+        val statuses = client().listSessionStatuses("/home/dev/shop-api")
+        assertEquals(mapOf("ses_1" to "busy", "ses_2" to "idle"), statuses)
+        val recorded = server.takeRequest()
+        assertEquals("/session/status", recorded.requestUrl!!.encodedPath)
+        assertEquals("/home/dev/shop-api", recorded.requestUrl!!.queryParameter("directory"))
+    }
+
+    @Test
+    fun `list session statuses empty on http error`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(500))
+        assertEquals(emptyMap<String, String>(), client().listSessionStatuses("/home/dev/shop-api"))
+    }
+
+    @Test
+    fun `list session statuses empty on malformed body`() = runTest {
+        server.enqueue(MockResponse().setBody("not json"))
+        assertEquals(emptyMap<String, String>(), client().listSessionStatuses(null))
     }
 
     @Test

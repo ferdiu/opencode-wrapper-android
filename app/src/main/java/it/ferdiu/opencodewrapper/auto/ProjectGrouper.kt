@@ -6,6 +6,9 @@ data class ProjectGroup(
     val directory: String?,
     val label: String,
     val sessions: List<OcSession>,
+    /** Project badge color, taken from the group's first session (the car
+     *  layer copies the owning project's color onto every session). */
+    val iconColor: String? = null,
 )
 
 /**
@@ -24,6 +27,7 @@ object ProjectGrouper {
                     // so it maps to "Global" like OcProject.label does.
                     label = directory?.substringAfterLast('/')?.ifEmpty { "Global" } ?: "Unknown project",
                     sessions = group,
+                    iconColor = group.firstOrNull()?.iconColor,
                 )
             }
 }

@@ -1,5 +1,6 @@
 package it.ferdiu.opencodewrapper.auto
 
+import androidx.annotation.DrawableRes
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
@@ -12,13 +13,20 @@ import androidx.car.app.model.Tab
 import androidx.car.app.model.TabContents
 import androidx.car.app.model.TabTemplate
 import androidx.car.app.model.Template
+import androidx.core.graphics.drawable.IconCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import it.ferdiu.opencodewrapper.R
 import it.ferdiu.opencodewrapper.api.OcSession
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Root screen: loads all sessions once, then offers Sessions / Projects as
- *  tabs on hosts with car API 8+ (TabTemplate) or as a two-entry menu on
- *  older hosts. Both paths lead to the same screens. */
+/** Root screen: polls all sessions while visible, then offers Sessions /
+ *  Projects as tabs on hosts with car API 8+ (TabTemplate) or as a two-entry
+ *  menu on older hosts. Both paths lead to the same screens. The poll loop
+ *  doubles as the busy-indicator "blink": [blinkFrame] flips every cycle and
+ *  alternates the busy rows' play prefix. */
 class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Screen(carContext) {
 
     private sealed interface State {
@@ -28,6 +36,10 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
     }
 
     private var state: State = State.Loading
+
+    /** Blink phase for the running indicator: false = play icon shown,
+     *  true = dimmed/hidden. Toggled after every refresh cycle. */
+    private var blinkFrame = false
 
     /** Active tab content id of the TabTemplate path; mirrored from [tabCallback]. */
     private var activeTabContentId: String = TAB_SESSIONS
@@ -39,27 +51,57 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
         }
     }
 
-    init { refresh() }
-
-    private fun refresh() {
+    init {
         lifecycleScope.launch {
-            val client = carContext.openCodeClientOrNull()
-            state = when {
-                client == null -> State.Error("OpenCode server not configured on the phone")
-                else -> runCatching {
-                    // Verified live: unscoped /session only sees the default
-                    // instance - enumerate projects and fetch per worktree.
-                    client.listProjects().flatMap { project ->
-                        runCatching { client.listSessions(directory = project.worktree) }
-                            .getOrDefault(emptyList())
-                    }.sortedByDescending { it.updatedAt }
-                }.fold(
-                    onSuccess = { State.Ready(it) },
-                    onFailure = { State.Error("Couldn't reach the OpenCode server") },
-                )
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    refresh()
+                    blinkFrame = !blinkFrame
+                    // Redraw even when refresh() kept the previous Ready data
+                    // (server blip), so the blink keeps ticking.
+                    invalidate()
+                    delay(BLINK_INTERVAL_MS)
+                }
             }
-            invalidate()
         }
+    }
+
+    private suspend fun refresh() {
+        val client = carContext.openCodeClientOrNull()
+        val previous = state
+        state = when {
+            client == null -> State.Error("OpenCode server not configured on the phone")
+            else -> runCatching {
+                // Verified live: unscoped /session only sees the default
+                // instance - enumerate projects and fetch per worktree.
+                val projects = client.listProjects()
+                val colorByWorktree = projects.associate { it.worktree to it.iconColor }
+                projects.flatMap { project ->
+                    val sessions = runCatching { client.listSessions(directory = project.worktree) }
+                        .getOrDefault(emptyList())
+                    val statuses = runCatching { client.listSessionStatuses(project.worktree) }
+                        .getOrDefault(emptyMap())
+                    sessions.map { s ->
+                        s.copy(
+                            iconColor = colorByWorktree[s.directory],
+                            busy = statuses[s.id] in BUSY_STATUS_TYPES,
+                        )
+                    }
+                }.sortedByDescending { it.updatedAt }
+            }.fold(
+                onSuccess = { State.Ready(it) },
+                onFailure = {
+                    // Transient poll failures must not flash an error every
+                    // 4s over stale-but-usable data; only error out when no
+                    // successful load ever happened.
+                    when (previous) {
+                        is State.Ready -> previous
+                        else -> State.Error("Couldn't reach the OpenCode server")
+                    }
+                },
+            )
+        }
+        invalidate()
     }
 
     override fun onGetTemplate(): Template = when (val current = state) {
@@ -116,8 +158,8 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
             sessionRowsTemplate(sessions)
         }
         return TabTemplate.Builder(tabCallback)
-            .addTab(newTab(TAB_SESSIONS, "Sessions"))
-            .addTab(newTab(TAB_PROJECTS, "Projects"))
+            .addTab(newTab(TAB_SESSIONS, "Sessions", R.drawable.ic_tab_sessions))
+            .addTab(newTab(TAB_PROJECTS, "Projects", R.drawable.ic_tab_projects))
             .setActiveTabContentId(activeTabContentId)
             .setTabContents(TabContents.Builder(contentTemplate).build())
             // TabTemplate.build() requires an app-icon header action when not loading.
@@ -125,8 +167,22 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
             .build()
     }
 
-    private fun newTab(contentId: String, title: String): Tab =
-        Tab.Builder().setContentId(contentId).setTitle(title).setIcon(CarIcon.APP_ICON).build()
+    private fun newTab(contentId: String, title: String, @DrawableRes iconRes: Int): Tab =
+        Tab.Builder()
+            .setContentId(contentId)
+            .setTitle(title)
+            .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext, iconRes)).build())
+            .build()
+
+    /** Secondary text of a session row: the project label, prefixed with the
+     *  running indicator while busy. RowDecoration/setEndImage don't exist in
+     *  car-app 1.7.0 (setEndImage is 1.8.0+), so the play glyph prefixes the
+     *  text and blinkFrame toggles it for the blinking effect. */
+    private fun sessionRowText(session: OcSession): String {
+        val text = session.projectLabel ?: ""
+        val decorated = if (session.busy && !blinkFrame) BUSY_PREFIX + text else text
+        return decorated.trimEnd()
+    }
 
     // Same deprecated setTitle situation as loadingTemplate; rows mirror
     // SessionListScreen so both entry paths render identically.
@@ -140,7 +196,13 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
                 list.addItem(
                     Row.Builder()
                         .setTitle(session.title ?: "Untitled session")
-                        .addText(session.projectLabel ?: "")
+                        .setImage(
+                            ProjectIconFactory.projectIcon(
+                                carContext, session.projectLabel ?: "?", session.iconColor,
+                            ),
+                            Row.IMAGE_TYPE_ICON,
+                        )
+                        .addText(sessionRowText(session))
                         .setOnClickListener {
                             screenManager.push(ReadoutScreen(carContext, speaker, session))
                         }
@@ -164,10 +226,19 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
                 list.addItem(
                     Row.Builder()
                         .setTitle(project.label)
+                        .setImage(
+                            ProjectIconFactory.projectIcon(carContext, project.label, project.iconColor),
+                            Row.IMAGE_TYPE_ICON,
+                        )
                         .addText("${project.sessions.size} sessions")
                         .setOnClickListener {
+                            // Inside a project the rows are all the same
+                            // project - no per-row badges needed.
                             screenManager.push(
-                                SessionListScreen(carContext, speaker, project.sessions, project.label)
+                                SessionListScreen(
+                                    carContext, speaker, project.sessions, project.label,
+                                    showProjectIcons = false,
+                                )
                             )
                         }
                         .build()
@@ -183,5 +254,9 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
         private const val TAB_SESSIONS = "sessions"
         private const val TAB_PROJECTS = "projects"
         private const val MAX_ROWS = 20
+        private const val BLINK_INTERVAL_MS = 4000L
+        private const val BUSY_PREFIX = "▶ "
+        /** Session status types that count as "running" for the indicator. */
+        private val BUSY_STATUS_TYPES = setOf("busy", "retry")
     }
 }

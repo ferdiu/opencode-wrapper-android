@@ -80,9 +80,15 @@ interface OpenCodeClient {
 
     /** Newest sessions of ONE project instance ([directory] = project worktree,
      *  required - unscoped calls only see the server's default instance).
-     *  Throws [java.io.IOException] on transport failure so car screens can
-     *  distinguish "server down" from "no sessions". */
+     *  Sub-agent sessions (`parentID`) and archived sessions (`time.archived`)
+     *  are filtered out. Throws [java.io.IOException] on transport failure so
+     *  car screens can distinguish "server down" from "no sessions". */
     suspend fun listSessions(limit: Int = 50, directory: String? = null): List<OcSession>
+
+    /** Per-session status types of ONE project instance, keyed by session id
+     *  (values like "busy"/"idle"/"retry"). `GET /session/status?directory=…`.
+     *  Empty map on any failure - the car UI simply shows no busy indicators. */
+    suspend fun listSessionStatuses(directory: String?): Map<String, String>
 
     /** The session's last readable message (see [MessageTextExtractor]), or
      *  null if none exists. [directory] scopes to the right instance.
@@ -113,6 +119,8 @@ data class OcProject(
     val worktree: String,
     /** Display label: worktree basename ("Global" for the "/" worktree). */
     val label: String,
+    /** OpenCode web UI project color key ("pink"/"mint"/…), null when unset. */
+    val iconColor: String? = null,
 )
 
 data class OcSession(
@@ -124,6 +132,12 @@ data class OcSession(
     val directory: String?,
     /** time.updated epoch millis; 0 when absent. Used for newest-first sort. */
     val updatedAt: Long = 0,
+    /** Project color key copied from the owning [OcProject] by the car layer
+     *  (the session JSON itself carries no icon color). */
+    val iconColor: String? = null,
+    /** True while the session status is "busy"/"retry"; filled by the car
+     *  layer from [listSessionStatuses] for the blinking running indicator. */
+    val busy: Boolean = false,
 )
 
 data class PendingPermission(

@@ -29,10 +29,19 @@ class ProjectListScreen(
                 list.addItem(
                     Row.Builder()
                         .setTitle(project.label)
+                        .setImage(
+                            ProjectIconFactory.projectIcon(carContext, project.label, project.iconColor),
+                            Row.IMAGE_TYPE_ICON,
+                        )
                         .addText("${project.sessions.size} sessions")
                         .setOnClickListener {
+                            // Inside a project the rows are all the same
+                            // project - no per-row badges needed.
                             screenManager.push(
-                                SessionListScreen(carContext, speaker, project.sessions, project.label)
+                                SessionListScreen(
+                                    carContext, speaker, project.sessions, project.label,
+                                    showProjectIcons = false,
+                                )
                             )
                         }
                         .build()

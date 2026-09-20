@@ -56,6 +56,17 @@ class ProjectGrouperTest {
     }
 
     @Test
+    fun `icon color propagates from the group's first session`() {
+        val groups = ProjectGrouper.group(listOf(
+            session("ses_1", "/dev/a").copy(iconColor = "mint"),
+            session("ses_2", "/dev/a"),
+            session("ses_3", "/dev/b"),
+        ))
+        assertEquals("mint", groups.single { it.directory == "/dev/a" }.iconColor)
+        assertEquals(null, groups.single { it.directory == "/dev/b" }.iconColor)
+    }
+
+    @Test
     fun `empty input gives empty output`() {
         assertEquals(emptyList<ProjectGroup>(), ProjectGrouper.group(emptyList()))
     }

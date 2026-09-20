@@ -11,12 +11,16 @@ import it.ferdiu.opencodewrapper.api.OcSession
 
 /** Rows of sessions: title = session title, subtitle = project name. Used for
  *  the global list and, pre-filtered, inside a project. Hosts may cap row
- *  count while driving; we show at most [MAX_ROWS]. */
+ *  count while driving; we show at most [MAX_ROWS]. Pushed screens are static
+ *  snapshots: the busy indicator is shown but does not blink here (the blink
+ *  loop only runs on HomeScreen). [showProjectIcons] is false when all rows
+ *  belong to the same project (its badge would repeat on every row). */
 class SessionListScreen(
     carContext: CarContext,
     private val speaker: CarSpeaker,
     private val sessions: List<OcSession>,
     private val title: String,
+    private val showProjectIcons: Boolean = true,
 ) : Screen(carContext) {
 
     // ListTemplate.setTitle/setHeaderAction are deprecated in favor of Header
@@ -28,15 +32,24 @@ class SessionListScreen(
             list.addItem(Row.Builder().setTitle("No sessions yet").addText("Start one from your terminal").build())
         } else {
             sessions.take(MAX_ROWS).forEach { session ->
-                list.addItem(
-                    Row.Builder()
-                        .setTitle(session.title ?: "Untitled session")
-                        .addText(session.projectLabel ?: "")
-                        .setOnClickListener {
-                            screenManager.push(ReadoutScreen(carContext, speaker, session))
-                        }
-                        .build()
-                )
+                val row = Row.Builder()
+                    .setTitle(session.title ?: "Untitled session")
+                if (showProjectIcons) {
+                    row.setImage(
+                        ProjectIconFactory.projectIcon(
+                            carContext, session.projectLabel ?: "?", session.iconColor,
+                        ),
+                        Row.IMAGE_TYPE_ICON,
+                    )
+                }
+                // Static snapshot: no blinkFrame here, busy rows always carry
+                // the play prefix (see HomeScreen.sessionRowText).
+                val text = session.projectLabel ?: ""
+                row.addText(if (session.busy) (BUSY_PREFIX + text).trimEnd() else text)
+                row.setOnClickListener {
+                    screenManager.push(ReadoutScreen(carContext, speaker, session))
+                }
+                list.addItem(row.build())
             }
         }
         return ListTemplate.Builder()
@@ -48,5 +61,6 @@ class SessionListScreen(
 
     companion object {
         private const val MAX_ROWS = 20
+        private const val BUSY_PREFIX = "▶ "
     }
 }

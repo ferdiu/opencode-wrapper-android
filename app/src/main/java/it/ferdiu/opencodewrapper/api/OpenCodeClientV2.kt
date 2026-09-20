@@ -223,10 +223,15 @@ class OpenCodeClientV2(
         return root.mapNotNull { runCatching {
             val obj = it.jsonObject
             val worktree = obj["worktree"]?.jsonPrimitive?.content ?: error("missing worktree")
+            val iconColor = runCatching {
+                (obj["icon"] as? JsonObject)?.get("color")
+                    ?.takeIf { color -> color !is JsonNull }?.jsonPrimitive?.content
+            }.getOrNull()
             OcProject(
                 id = obj["id"]?.jsonPrimitive?.content ?: worktree,
                 worktree = worktree,
                 label = worktree.substringAfterLast('/').ifEmpty { "Global" },
+                iconColor = iconColor,
             )
         }.getOrNull() }
     }
@@ -249,8 +254,38 @@ class OpenCodeClientV2(
                 ?: root.jsonObject["data"]?.jsonArray
                 ?: return emptyList()
         }
-        return entries.mapNotNull { runCatching { ocSessionFromInfo(it.jsonObject) }.getOrNull() }
+        return entries.mapNotNull { entry ->
+            runCatching {
+                val obj = entry.jsonObject
+                // Car lists must not show sub-agent sessions (parentID) or
+                // archived ones (time.archived); both are pure noise there.
+                if (obj["parentID"]?.takeIf { it !is JsonNull } != null) return@runCatching null
+                val time = obj["time"] as? JsonObject
+                if (time?.get("archived")?.takeIf { it !is JsonNull } != null) return@runCatching null
+                ocSessionFromInfo(obj)
+            }.getOrNull()
+        }
     }
+
+    override suspend fun listSessionStatuses(directory: String?): Map<String, String> = runCatching {
+        val httpUrl = "${config.normalizedBaseUrl}/session/status".toHttpUrl().newBuilder()
+            .apply { if (directory != null) addQueryParameter("directory", directory) }
+            .build()
+        val request = authedRequest(httpUrl.toString()).build()
+        val body = executeAsync(request).use { resp ->
+            if (!resp.isSuccessful) return@runCatching emptyMap()
+            resp.body.string()
+        }
+        if (body.isEmpty()) return@runCatching emptyMap()
+        val root = json.parseToJsonElement(body)
+        if (root !is JsonObject) return@runCatching emptyMap()
+        root.entries.mapNotNull { (id, value) ->
+            val type = runCatching {
+                (value as? JsonObject)?.get("type")?.jsonPrimitive?.content
+            }.getOrNull()
+            type?.let { id to it }
+        }.toMap()
+    }.getOrDefault(emptyMap())
 
     override suspend fun getLastMessage(sessionId: String, directory: String?): SessionMessage? {
         val httpUrl = "${config.normalizedBaseUrl}/session/$sessionId/message".toHttpUrl().newBuilder()
