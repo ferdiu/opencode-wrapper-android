@@ -7,13 +7,16 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonArray
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import okhttp3.Call
@@ -206,6 +209,103 @@ class OpenCodeClientV2(
             .build()
         executeAsync(request).use { it.isSuccessful }
     }.getOrDefault(false)
+
+    override suspend fun listProjects(): List<OcProject> {
+        val request = authedRequest("${config.normalizedBaseUrl}/project").build()
+        val body = executeAsync(request).use { resp ->
+            if (!resp.isSuccessful) throw IOException("listProjects: HTTP ${resp.code}")
+            resp.body.string()
+        }
+        if (body.isEmpty()) return emptyList()
+        val root = json.parseToJsonElement(body)
+        if (root !is kotlinx.serialization.json.JsonArray) return emptyList()
+        return root.mapNotNull { runCatching {
+            val obj = it.jsonObject
+            val worktree = obj["worktree"]?.jsonPrimitive?.content ?: error("missing worktree")
+            OcProject(
+                id = obj["id"]?.jsonPrimitive?.content ?: worktree,
+                worktree = worktree,
+                label = worktree.substringAfterLast('/').ifEmpty { "Global" },
+            )
+        }.getOrNull() }
+    }
+
+    override suspend fun listSessions(limit: Int, directory: String?): List<OcSession> {
+        val httpUrl = "${config.normalizedBaseUrl}/session".toHttpUrl().newBuilder()
+            .addQueryParameter("limit", limit.toString())
+            .apply { if (directory != null) addQueryParameter("directory", directory) }
+            .build()
+        val request = authedRequest(httpUrl.toString()).build()
+        val body = executeAsync(request).use { resp ->
+            if (!resp.isSuccessful) throw IOException("listSessions: HTTP ${resp.code}")
+            resp.body.string()
+        }
+        if (body.isEmpty()) return emptyList()
+        val root = json.parseToJsonElement(body)
+        val entries = when {
+            root is kotlinx.serialization.json.JsonArray -> root
+            else -> root.jsonObject["sessions"]?.jsonArray
+                ?: root.jsonObject["data"]?.jsonArray
+                ?: return emptyList()
+        }
+        return entries.mapNotNull { runCatching { ocSessionFromInfo(it.jsonObject) }.getOrNull() }
+    }
+
+    override suspend fun getLastMessage(sessionId: String, directory: String?): SessionMessage? {
+        val httpUrl = "${config.normalizedBaseUrl}/session/$sessionId/message".toHttpUrl().newBuilder()
+            .apply { if (directory != null) addQueryParameter("directory", directory) }
+            .build()
+        val request = authedRequest(httpUrl.toString()).build()
+        val body = executeAsync(request).use { resp ->
+            if (!resp.isSuccessful) throw IOException("getLastMessage: HTTP ${resp.code}")
+            resp.body.string()
+        }
+        if (body.isEmpty()) return null
+        val root = json.parseToJsonElement(body)
+        val messages = when {
+            root is kotlinx.serialization.json.JsonArray -> root
+            else -> root.jsonObject["messages"]?.jsonArray
+                ?: root.jsonObject["data"]?.jsonArray
+                ?: root.jsonObject["items"]?.jsonArray
+                ?: return null
+        }
+        return MessageTextExtractor.lastReadableMessage(messages)
+    }
+
+    override suspend fun sendPrompt(sessionId: String, text: String, directory: String?): Boolean = runCatching {
+        // Verified live (Variant A): POST /session/{id}/message {parts}.
+        val httpUrl = "${config.normalizedBaseUrl}/session/$sessionId/message".toHttpUrl().newBuilder()
+            .apply { if (directory != null) addQueryParameter("directory", directory) }
+            .build()
+        val payload = buildJsonObject {
+            putJsonArray("parts") {
+                addJsonObject {
+                    put("type", "text")
+                    put("text", text)
+                }
+            }
+        }.toString()
+        val request = authedRequest(httpUrl.toString())
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        executeAsync(request).use { it.isSuccessful }
+    }.getOrDefault(false)
+
+    private fun ocSessionFromInfo(obj: JsonObject): OcSession {
+        val id = obj["id"]?.jsonPrimitive?.content ?: error("missing session id")
+        // JsonNull.content returns the literal "null" (it does not throw), so
+        // JSON nulls must be filtered out before reading the primitive.
+        val title = runCatching {
+            obj["title"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+        }.getOrNull()
+        val directory = runCatching {
+            obj["directory"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+        }.getOrNull()
+        val updatedAt = runCatching {
+            (obj["time"] as? JsonObject)?.get("updated")?.jsonPrimitive?.long ?: 0L
+        }.getOrDefault(0L)
+        return OcSession(id, title, directory?.substringAfterLast('/'), directory, updatedAt)
+    }
 
     private fun scopedReplyUrl(kind: String, requestId: String, directory: String?): String =
         "${config.normalizedBaseUrl}/$kind/$requestId/reply"
