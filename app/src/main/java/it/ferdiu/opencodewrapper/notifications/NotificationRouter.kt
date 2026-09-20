@@ -27,6 +27,13 @@ class NotificationRouter(private val context: Context) {
      *  (/{base64url(directory)}/session/{id}). */
     private val sessionDirectories = mutableMapOf<String, String>()
 
+    private val retryStreaks = RetryStreakTracker()
+    /** Reverse indexes so session.deleted can cancel prompt notifications
+     *  whose stable IDs derive from permissionId/requestId, not sessionId.
+     *  In-memory only, like the other router maps. */
+    private val sessionPermissions = mutableMapOf<String, MutableSet<String>>()
+    private val sessionQuestions = mutableMapOf<String, MutableSet<String>>()
+
     private fun rememberDirectory(sessionId: String?, directory: String?) {
         if (sessionId != null && directory != null) sessionDirectories[sessionId] = directory
     }
@@ -40,16 +47,19 @@ class NotificationRouter(private val context: Context) {
 
             is OcEvent.SessionBusy -> {
                 rememberDirectory(event.sessionId, directory)
+                retryStreaks.reset(event.sessionId)
                 sessionWasBusy[event.sessionId] = true
             }
 
             is OcEvent.SessionIdle -> {
                 rememberDirectory(event.sessionId, directory)
+                retryStreaks.reset(event.sessionId)
                 val wasBusy = sessionWasBusy[event.sessionId] == true
                 sessionWasBusy[event.sessionId] = false
                 if (wasBusy) {
                     NotificationHelper.notifyEvent(
                         context = context,
+                        notificationId = NotificationHelper.statusNotificationId(event.sessionId),
                         channel = NotificationHelper.CHANNEL_STATUS,
                         title = "Session finished",
                         text = sessionLabel(event.sessionId),
@@ -60,16 +70,28 @@ class NotificationRouter(private val context: Context) {
             }
 
             is OcEvent.SessionRetrying -> {
-                // Deliberately silent: transient retries are exactly the kind
-                // of low-level noise the brief asks us to skip. A persistent
-                // failure will still surface via SessionError.
-                Log.d(TAG, "Session ${event.sessionId} retrying (attempt ${event.attempt})")
+                rememberDirectory(event.sessionId, directory)
+                if (retryStreaks.shouldNotify(event.sessionId, event.attempt)) {
+                    NotificationHelper.notifyEvent(
+                        context = context,
+                        notificationId = NotificationHelper.errorNotificationId(event.sessionId),
+                        channel = NotificationHelper.CHANNEL_ERROR,
+                        title = "Session struggling",
+                        text = "${sessionLabel(event.sessionId)} is stuck retrying (attempt ${event.attempt}) — check the server or model",
+                        sessionId = event.sessionId,
+                        directory = sessionDirectories[event.sessionId],
+                    )
+                } else {
+                    Log.d(TAG, "Session ${event.sessionId} retrying (attempt ${event.attempt})")
+                }
             }
 
             is OcEvent.SessionError -> {
                 rememberDirectory(event.sessionId, directory)
+                event.sessionId?.let { retryStreaks.reset(it) }
                 NotificationHelper.notifyEvent(
                     context = context,
+                    notificationId = NotificationHelper.errorNotificationId(event.sessionId ?: "unknown"),
                     channel = NotificationHelper.CHANNEL_ERROR,
                     title = "Session error",
                     text = event.message?.takeIf { it.isNotBlank() }
@@ -81,32 +103,64 @@ class NotificationRouter(private val context: Context) {
 
             is OcEvent.PermissionAsked -> {
                 rememberDirectory(event.sessionId, directory)
-                NotificationHelper.notifyEvent(
+                sessionPermissions.getOrPut(event.sessionId) { mutableSetOf() }.add(event.permissionId)
+                NotificationHelper.notifyPermission(
                     context = context,
-                    channel = NotificationHelper.CHANNEL_ACTION,
-                    title = "Permission needed",
-                    text = event.title?.takeIf { it.isNotBlank() }
-                        ?: "${sessionLabel(event.sessionId)} is waiting on a permission decision",
+                    permissionId = event.permissionId,
                     sessionId = event.sessionId,
+                    commandLabel = event.title?.takeIf { it.isNotBlank() }
+                        ?: "The agent is waiting on a permission decision",
+                    sessionLabel = sessionLabel(event.sessionId),
                     directory = sessionDirectories[event.sessionId],
+                )
+            }
+
+            is OcEvent.PermissionReplied -> {
+                sessionPermissions[event.sessionId]?.remove(event.permissionId)
+                NotificationHelper.cancelNotification(
+                    context,
+                    NotificationHelper.permissionNotificationId(event.permissionId),
                 )
             }
 
             is OcEvent.QuestionAsked -> {
                 rememberDirectory(event.sessionId, directory)
-                NotificationHelper.notifyEvent(
+                sessionQuestions.getOrPut(event.sessionId) { mutableSetOf() }.add(event.requestId)
+                NotificationHelper.notifyQuestion(
                     context = context,
-                    channel = NotificationHelper.CHANNEL_ACTION,
-                    title = "Question from agent",
-                    text = event.prompt?.takeIf { it.isNotBlank() }
-                        ?: "${sessionLabel(event.sessionId)} needs your input",
+                    requestId = event.requestId,
                     sessionId = event.sessionId,
+                    prompt = event.prompt?.takeIf { it.isNotBlank() }
+                        ?: "The agent needs your input",
+                    sessionLabel = sessionLabel(event.sessionId),
                     directory = sessionDirectories[event.sessionId],
                 )
             }
 
-            is OcEvent.Connected, is OcEvent.Heartbeat, is OcEvent.Unknown,
-            is OcEvent.PermissionReplied, is OcEvent.QuestionSettled, is OcEvent.SessionDeleted -> {
+            is OcEvent.QuestionSettled -> {
+                sessionQuestions[event.sessionId]?.remove(event.requestId)
+                NotificationHelper.cancelNotification(
+                    context,
+                    NotificationHelper.questionNotificationId(event.requestId),
+                )
+            }
+
+            is OcEvent.SessionDeleted -> {
+                NotificationHelper.cancelNotification(context, NotificationHelper.statusNotificationId(event.sessionId))
+                NotificationHelper.cancelNotification(context, NotificationHelper.errorNotificationId(event.sessionId))
+                sessionPermissions.remove(event.sessionId)?.forEach {
+                    NotificationHelper.cancelNotification(context, NotificationHelper.permissionNotificationId(it))
+                }
+                sessionQuestions.remove(event.sessionId)?.forEach {
+                    NotificationHelper.cancelNotification(context, NotificationHelper.questionNotificationId(it))
+                }
+                sessionWasBusy.remove(event.sessionId)
+                sessionTitles.remove(event.sessionId)
+                sessionDirectories.remove(event.sessionId)
+                retryStreaks.reset(event.sessionId)
+            }
+
+            is OcEvent.Connected, is OcEvent.Heartbeat, is OcEvent.Unknown -> {
                 // No user-facing notification for connection bookkeeping or
                 // event types we don't specifically model.
             }
@@ -117,15 +171,26 @@ class NotificationRouter(private val context: Context) {
      *  while we were disconnected, so it still gets surfaced. */
     fun onRecoveredStatus(sessionId: String, statusType: String) {
         when (statusType) {
-            "idle" -> if (sessionWasBusy[sessionId] == true) {
-                sessionWasBusy[sessionId] = false
-                NotificationHelper.notifyEvent(
-                    context, NotificationHelper.CHANNEL_STATUS,
-                    "Session finished", sessionLabel(sessionId), sessionId,
-                    sessionDirectories[sessionId],
-                )
+            "idle" -> {
+                // No longer stuck retrying, whether or not we notify.
+                retryStreaks.reset(sessionId)
+                if (sessionWasBusy[sessionId] == true) {
+                    sessionWasBusy[sessionId] = false
+                    NotificationHelper.notifyEvent(
+                        context = context,
+                        notificationId = NotificationHelper.statusNotificationId(sessionId),
+                        channel = NotificationHelper.CHANNEL_STATUS,
+                        title = "Session finished",
+                        text = sessionLabel(sessionId),
+                        sessionId = sessionId,
+                        directory = sessionDirectories[sessionId],
+                    )
+                }
             }
-            "busy" -> sessionWasBusy[sessionId] = true
+            "busy" -> {
+                retryStreaks.reset(sessionId)
+                sessionWasBusy[sessionId] = true
+            }
         }
     }
 

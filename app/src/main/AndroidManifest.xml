@@ -60,5 +60,10 @@
             </intent-filter>
         </receiver>
 
+        <!-- All PendingIntents are explicit, so no intent-filter needed. -->
+        <receiver
+            android:name=".notifications.NotificationActionReceiver"
+            android:exported="false" />
+
     </application>
 </manifest>

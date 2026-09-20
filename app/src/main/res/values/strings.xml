@@ -24,5 +24,17 @@
     <string name="service_notif_reconnecting">Reconnecting…</string>
     <string name="service_notif_offline">Not connected — tap to configure</string>
 
+    <string name="notif_action_allow">Allow</string>
+    <string name="notif_action_allow_always">Allow always</string>
+    <string name="notif_action_deny">Deny</string>
+    <string name="notif_action_answer">Answer</string>
+    <string name="notif_voice_reply_prompt">Say allow, deny, or allow always</string>
+    <string name="notif_question_reply_prompt">Type or speak your answer</string>
+    <string name="notif_permission_voice_hint">Reply allow, deny, or allow always.</string>
+    <string name="notif_reply_failed">Couldn\'t send your answer — tap to retry</string>
+    <string name="notif_voice_not_understood">I didn\'t catch that — reply allow, deny, or allow always</string>
+    <string name="notif_answer_blank">Empty answer — type or speak your reply</string>
+    <string name="notif_no_server">OpenCode server not configured</string>
+
     <string name="onboarding_message">Enter your OpenCode server address to get started. This app keeps a background connection alive so you get notifications even when it\'s not open.</string>
 </resources>
