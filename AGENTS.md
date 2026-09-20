@@ -22,6 +22,7 @@ device even when the app is closed.
   - `notifications/` — channels and routing of events to notifications
   - `service/` — OpenCodeEventService (foreground service), BootReceiver, ReconnectPolicy
   - `ui/` — MainActivity (connection/web view), SettingsActivity
+  - `auto/` — Android Auto car-screen app (Car App Library): OpenCodeCarAppService/Session, navigation + readout/dictation/confirm screens, CarSpeaker (TTS), ProjectGrouper
 - `app/src/main/res/` — layouts, drawables, values, launcher icon
 
 ## Build & Test
