@@ -3,8 +3,8 @@ package it.ferdiu.opencodewrapper.auto
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
-import androidx.car.app.model.Pane
-import androidx.car.app.model.PaneTemplate
+import androidx.car.app.model.ItemList
+import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.lifecycle.lifecycleScope
@@ -15,6 +15,9 @@ import kotlinx.coroutines.launch
  * Reads the dictated reply back (and shows it), then waits for an explicit
  * tap: Send ships it to the session, Retry records again, Cancel drops it.
  * Nothing is ever sent without this confirmation step.
+ *
+ * Actions are clickable list rows rather than pane actions: hosts cap pane
+ * actions (2 on the DHU) and this screen needs three.
  */
 class ConfirmScreen(
     carContext: CarContext,
@@ -50,41 +53,42 @@ class ConfirmScreen(
         }
     }
 
+    // ListTemplate.setTitle/setHeaderAction are deprecated in favor of Header
+    // (needs host API 8+); kept so the confirmation renders on every host level.
+    @Suppress("DEPRECATION")
     override fun onGetTemplate(): Template {
-        val paneBuilder = Pane.Builder()
-            .addRow(Row.Builder().setTitle("Your reply").addText(dictatedText).build())
-        error?.let { paneBuilder.addRow(Row.Builder().setTitle(it).build()) }
-        val pane = paneBuilder
-            .addAction(
-                Action.Builder()
+        val list = ItemList.Builder()
+            .addItem(Row.Builder().setTitle("Your reply").addText(dictatedText).build())
+            .apply {
+                error?.let { addItem(Row.Builder().setTitle(it).build()) }
+            }
+            .addItem(
+                Row.Builder()
                     .setTitle(if (sending) "Sending…" else "Send")
                     .setOnClickListener { send() }
                     .build()
             )
-            .addAction(
-                Action.Builder()
+            .addItem(
+                Row.Builder()
                     .setTitle("Retry")
+                    .addText("Record again")
                     .setOnClickListener {
                         screenManager.push(DictationScreen(carContext, speaker, session))
                     }
                     .build()
             )
-            .addAction(
-                Action.Builder()
+            .addItem(
+                Row.Builder()
                     .setTitle("Cancel")
+                    .addText("Discard this reply")
                     .setOnClickListener { screenManager.popToRoot() }
                     .build()
             )
             .build()
-        return confirmTemplate(pane)
-    }
-
-    // PaneTemplate.setTitle/setHeaderAction are deprecated in favor of Header
-    // (needs host API 8+); kept so the confirmation renders on every host level.
-    @Suppress("DEPRECATION")
-    private fun confirmTemplate(pane: Pane): Template =
-        PaneTemplate.Builder(pane)
+        return ListTemplate.Builder()
             .setTitle("Reply to ${session.title ?: "session"}")
             .setHeaderAction(Action.BACK)
+            .setSingleList(list)
             .build()
+    }
 }

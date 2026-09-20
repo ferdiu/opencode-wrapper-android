@@ -5,8 +5,6 @@ import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
-import androidx.car.app.model.Pane
-import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.lifecycle.lifecycleScope
@@ -111,71 +109,86 @@ class ReadoutScreen(
         is State.Permission -> permissionTemplate(s.pending)
     }
 
-    // PaneTemplate.setTitle/setHeaderAction are deprecated in favor of Header
+    // ListTemplate.setTitle/setHeaderAction are deprecated in favor of Header
     // (needs host API 8+); kept so the detail renders on every host level.
+    // Rows (not pane actions) because hosts cap pane actions (2 on the DHU)
+    // and forbid click listeners on pane rows; list rows are clickable.
     @Suppress("DEPRECATION")
     private fun messageTemplate(message: SessionMessage): Template {
         val who = if (message.isFromUser) "You said" else "Assistant said"
-        return PaneTemplate.Builder(
-            Pane.Builder()
-                // PaneTemplate rows must not have click listeners (host
-                // constraint) - full text is reached via the action below.
-                .addRow(
-                    Row.Builder()
-                        .setTitle(who)
-                        .addText(message.text)
-                        .build()
-                )
-                .addAction(
-                    Action.Builder()
-                        .setTitle("Read")
-                        .setOnClickListener { speak("$who: ${message.text}") }
-                        .build()
-                )
-                .addAction(
-                    Action.Builder()
-                        .setTitle("Reply")
-                        .setOnClickListener {
-                            screenManager.push(DictationScreen(carContext, speaker, session))
-                        }
-                        .build()
-                )
-                .addAction(
-                    Action.Builder()
-                        .setTitle("Full text")
-                        .setOnClickListener {
-                            screenManager.push(FullTextScreen(carContext, who, message.text))
-                        }
-                        .build()
-                )
-                .build()
-        )
+        val list = ItemList.Builder()
+            .addItem(
+                Row.Builder()
+                    .setTitle(who)
+                    .addText(message.text)
+                    .setOnClickListener {
+                        screenManager.push(FullTextScreen(carContext, who, message.text))
+                    }
+                    .build()
+            )
+            .addItem(
+                Row.Builder()
+                    .setTitle("Read")
+                    .addText("Read the message aloud")
+                    .setOnClickListener { speak("$who: ${message.text}") }
+                    .build()
+            )
+            .addItem(
+                Row.Builder()
+                    .setTitle("Reply")
+                    .addText("Dictate a reply")
+                    .setOnClickListener {
+                        screenManager.push(DictationScreen(carContext, speaker, session))
+                    }
+                    .build()
+            )
+            .build()
+        return ListTemplate.Builder()
             .setTitle(session.title ?: "Session")
             .setHeaderAction(Action.BACK)
+            .setSingleList(list)
             .build()
     }
 
-    // Same deprecated setTitle/setHeaderAction situation as messageTemplate.
-    // Pane allows at most 4 actions on most hosts - this variant uses exactly
-    // 4 (Back lives in the header). That's intentional.
+    // Same ListTemplate-not-Pane rationale as messageTemplate (host pane
+    // action cap); decisions are clickable rows. Deprecated setters handled
+    // as above.
     @Suppress("DEPRECATION")
-    private fun permissionTemplate(pending: PendingPermission): Template =
-        PaneTemplate.Builder(
-            Pane.Builder()
-                .addRow(Row.Builder().setTitle("Permission needed").addText(pending.label).build())
-                .addAction(Action.Builder().setTitle("Read")
-                    .setOnClickListener { speak("Permission needed: ${pending.label}") }.build())
-                .addAction(Action.Builder().setTitle("Allow")
-                    .setOnClickListener { decide(pending, PermissionDecision.ONCE) }.build())
-                .addAction(Action.Builder().setTitle("Deny")
-                    .setOnClickListener { decide(pending, PermissionDecision.REJECT) }.build())
-                .addAction(Action.Builder().setTitle("Allow always")
-                    .setOnClickListener { decide(pending, PermissionDecision.ALWAYS) }.build())
-                .build()
-        )
+    private fun permissionTemplate(pending: PendingPermission): Template {
+        val list = ItemList.Builder()
+            .addItem(Row.Builder().setTitle("Permission needed").addText(pending.label).build())
+            .addItem(
+                Row.Builder()
+                    .setTitle("Read")
+                    .addText("Read the request aloud")
+                    .setOnClickListener { speak("Permission needed: ${pending.label}") }
+                    .build()
+            )
+            .addItem(
+                Row.Builder()
+                    .setTitle("Allow")
+                    .setOnClickListener { decide(pending, PermissionDecision.ONCE) }
+                    .build()
+            )
+            .addItem(
+                Row.Builder()
+                    .setTitle("Deny")
+                    .setOnClickListener { decide(pending, PermissionDecision.REJECT) }
+                    .build()
+            )
+            .addItem(
+                Row.Builder()
+                    .setTitle("Allow always")
+                    .setOnClickListener { decide(pending, PermissionDecision.ALWAYS) }
+                    .build()
+            )
+            .build()
+        return ListTemplate.Builder()
             .setTitle(session.title ?: "Session")
             .setHeaderAction(Action.BACK)
+            .setSingleList(list)
             .build()
+    }
 
     // ListTemplate.setTitle/setHeaderAction are deprecated in favor of Header
     // (needs host API 8+); kept so these screens render on every host level.
