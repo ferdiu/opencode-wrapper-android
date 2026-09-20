@@ -20,7 +20,9 @@ object ProjectGrouper {
             .map { (directory, group) ->
                 ProjectGroup(
                     directory = directory,
-                    label = directory?.substringAfterLast('/') ?: "Unknown project",
+                    // "/" is the global instance worktree: basename is empty,
+                    // so it maps to "Global" like OcProject.label does.
+                    label = directory?.substringAfterLast('/')?.ifEmpty { "Global" } ?: "Unknown project",
                     sessions = group,
                 )
             }

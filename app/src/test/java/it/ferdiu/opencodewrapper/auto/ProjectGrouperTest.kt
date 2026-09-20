@@ -39,6 +39,12 @@ class ProjectGrouperTest {
     }
 
     @Test
+    fun `root worktree sessions group under Global label`() {
+        val groups = ProjectGrouper.group(listOf(session("ses_1", "/")))
+        assertEquals("Global", groups.single().label)
+    }
+
+    @Test
     fun `sessions without directory land in an unknown-project bucket`() {
         val groups = ProjectGrouper.group(listOf(
             session("ses_1", "/dev/a"),

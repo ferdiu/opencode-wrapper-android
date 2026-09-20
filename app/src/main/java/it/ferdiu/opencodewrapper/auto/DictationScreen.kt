@@ -36,6 +36,7 @@ class DictationScreen(
     private var partial: String = ""
     private var listening = false
     private var error: String? = null
+    private var done = false
     private var recognizer: SpeechRecognizer? = null
 
     init {
@@ -60,6 +61,10 @@ class DictationScreen(
             // render the permission request at all).
             carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_5 ->
                 carContext.requestPermissions(listOf(Manifest.permission.RECORD_AUDIO)) { granted, _ ->
+                    // The callback can arrive after the screen was destroyed;
+                    // creating a recognizer then would leak it (nothing left
+                    // to tear it down).
+                    if (lifecycle.currentState == Lifecycle.State.DESTROYED) return@requestPermissions
                     if (granted.contains(Manifest.permission.RECORD_AUDIO)) startListening()
                     else showError("Microphone permission denied")
                 }
@@ -85,7 +90,13 @@ class DictationScreen(
             }
 
             override fun onError(errorCode: Int) {
-                if (partial.isNotBlank()) finish(partial) else showError("Couldn't hear you — try again")
+                if (partial.isNotBlank()) finish(partial) else {
+                    // Session is over either way; tidy the recognizer up
+                    // (hygiene - the mic is off regardless).
+                    recognizer?.destroy()
+                    recognizer = null
+                    showError("Couldn't hear you — try again")
+                }
             }
 
             override fun onReadyForSpeech(params: Bundle?) {}
@@ -108,7 +119,14 @@ class DictationScreen(
         recognizer = null
         listening = false
         if (text.isBlank()) showError("Didn't catch anything — try again")
-        else screenManager.push(ConfirmScreen(carContext, speaker, session, text))
+        else {
+            // This screen stays in the back stack under ConfirmScreen; flag
+            // it terminal so it renders an informational state instead of a
+            // dead "Processing…" dictation UI.
+            done = true
+            invalidate()
+            screenManager.push(ConfirmScreen(carContext, speaker, session, text))
+        }
     }
 
     private fun showError(message: String) {
@@ -118,9 +136,23 @@ class DictationScreen(
     }
 
     override fun onGetTemplate(): Template {
+        if (done) return doneTemplate()
         error?.let { return errorTemplate(it) }
         return dictationTemplate()
     }
+
+    // Terminal state after the reply was pushed to ConfirmScreen: the reply
+    // already moved on, so no Done/Cancel actions are offered here.
+    // Same deprecated setTitle/setHeaderAction situation as errorTemplate.
+    @Suppress("DEPRECATION")
+    private fun doneTemplate(): Template =
+        ListTemplate.Builder()
+            .setTitle("Reply to ${session.title ?: "session"}")
+            .setSingleList(
+                ItemList.Builder().addItem(Row.Builder().setTitle("Reply captured").build()).build()
+            )
+            .setHeaderAction(Action.BACK)
+            .build()
 
     // ListTemplate.setTitle/setHeaderAction are deprecated in favor of Header
     // (needs host API 8+); kept so the error renders on every host level.
@@ -129,7 +161,21 @@ class DictationScreen(
         ListTemplate.Builder()
             .setTitle("Reply to ${session.title ?: "session"}")
             .setSingleList(
-                ItemList.Builder().addItem(Row.Builder().setTitle(message).build()).build()
+                ItemList.Builder()
+                    .addItem(Row.Builder().setTitle(message).build())
+                    // Recovery without leaving the screen: clears the error
+                    // and re-runs the permission flow (which re-requests the
+                    // mic when denied).
+                    .addItem(
+                        Row.Builder()
+                            .setTitle("Try again")
+                            .setOnClickListener {
+                                error = null
+                                ensurePermissionAndStart()
+                            }
+                            .build()
+                    )
+                    .build()
             )
             .setHeaderAction(Action.BACK)
             .build()

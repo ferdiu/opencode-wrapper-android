@@ -116,6 +116,19 @@ class OpenCodeClientV2SessionsTest {
     }
 
     @Test
+    fun `pending permission label joins all patterns`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """
+            [
+              { "id": "per_1", "sessionID": "ses_1", "permission": "bash", "patterns": ["rm -rf build/", "echo hi"] }
+            ]
+            """.trimIndent()
+        ))
+        val pending = client().listPendingPermissions("ses_1", null)
+        assertEquals(listOf(PendingPermission("per_1", "bash: rm -rf build/, echo hi")), pending)
+    }
+
+    @Test
     fun `pending permissions empty when none`() = runTest {
         server.enqueue(MockResponse().setBody("[]"))
         assertEquals(emptyList<PendingPermission>(), client().listPendingPermissions("ses_1", null))

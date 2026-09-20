@@ -323,11 +323,15 @@ class OpenCodeClientV2(
         val permission = runCatching {
             obj["permission"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
         }.getOrNull() ?: "permission"
-        val firstPattern = (obj["patterns"] as? kotlinx.serialization.json.JsonArray)
-            ?.firstOrNull()
-            ?.takeIf { it !is JsonNull }
-            ?.let { (it as? JsonPrimitive)?.contentOrNull() }
-        return PendingPermission(id, if (firstPattern != null) "$permission: $firstPattern" else permission)
+        val patterns = (obj["patterns"] as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { pattern ->
+                pattern.takeIf { it !is JsonNull }?.let { (it as? JsonPrimitive)?.contentOrNull() }
+            }
+            .orEmpty()
+        // Multi-pattern requests (e.g. "allow always") hide context behind the
+        // patterns list - show all of them, not just the first.
+        val label = if (patterns.isEmpty()) permission else "$permission: " + patterns.joinToString(", ")
+        return PendingPermission(id, label)
     }
 
     private fun JsonPrimitive.contentOrNull(): String? = runCatching { content }.getOrNull()

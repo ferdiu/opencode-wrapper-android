@@ -60,10 +60,11 @@ class ReadoutScreen(
                 pending.isNotEmpty() -> State.Permission(pending.first())
                 else -> {
                     val result = runCatching { client.getLastMessage(session.id, session.directory) }
+                    val message = result.getOrNull()
                     when {
                         result.isFailure -> State.Error("Couldn't reach the OpenCode server")
-                        result.getOrNull() == null -> State.Error("Nothing to show in this session")
-                        else -> State.Message(result.getOrNull()!!)
+                        message == null -> State.Error("Nothing to show in this session")
+                        else -> State.Message(message)
                     }
                 }
             }
@@ -85,11 +86,15 @@ class ReadoutScreen(
             val client = carContext.openCodeClientOrNull()
             val ok = client != null &&
                 runCatching { client.replyPermission(session.id, pending.id, decision, session.directory) }.getOrDefault(false)
-            busy = false
+            // Stay busy until the confirmation is spoken and the refresh has
+            // been kicked off - releasing earlier lets a fast second tap
+            // re-POST the already-answered request.
             if (ok) {
                 speaker.speakAndWait("Answer sent")
                 load() // refresh: new last message, or the next pending request
+                busy = false
             } else {
+                busy = false
                 state = State.Error("Couldn't send the answer — maybe it was already handled elsewhere")
                 invalidate()
             }
