@@ -52,6 +52,11 @@
                 android:value="Maintains a live event connection to a self-hosted OpenCode server so agent notifications (permission requests, questions, session completion) keep working while the app is backgrounded." />
         </service>
 
+        <!-- Declares Android Auto support (notification read-aloud/reply). -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <receiver
             android:name=".service.BootReceiver"
             android:exported="false">
