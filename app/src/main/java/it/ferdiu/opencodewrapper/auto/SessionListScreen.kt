@@ -39,13 +39,13 @@ class SessionListScreen(
                         ProjectIconFactory.projectIcon(
                             carContext, session.projectLabel ?: "?", session.iconColor,
                         ),
-                        Row.IMAGE_TYPE_ICON,
+                        Row.IMAGE_TYPE_LARGE, // LARGE: hosts tint TYPE_ICON images (bitmap badges would render as white silhouettes)
                     )
                 }
-                // Static snapshot: no blinkFrame here, busy rows always carry
-                // the play prefix (see HomeScreen.sessionRowText).
+                // Static snapshot: busy rows always carry the running marker
+                // (same format as HomeScreen.sessionRowText).
                 val text = session.projectLabel ?: ""
-                row.addText(if (session.busy) (BUSY_PREFIX + text).trimEnd() else text)
+                row.addText(if (session.busy) "▶ Running · $text".trimEnd() else text)
                 row.setOnClickListener {
                     screenManager.push(ReadoutScreen(carContext, speaker, session))
                 }
@@ -61,6 +61,5 @@ class SessionListScreen(
 
     companion object {
         private const val MAX_ROWS = 20
-        private const val BUSY_PREFIX = "▶ "
     }
 }

@@ -31,7 +31,7 @@ class ProjectListScreen(
                         .setTitle(project.label)
                         .setImage(
                             ProjectIconFactory.projectIcon(carContext, project.label, project.iconColor),
-                            Row.IMAGE_TYPE_ICON,
+                            Row.IMAGE_TYPE_LARGE, // LARGE: hosts tint TYPE_ICON images (bitmap badges would render as white silhouettes)
                         )
                         .addText("${project.sessions.size} sessions")
                         .setOnClickListener {
