@@ -8,13 +8,17 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
@@ -146,6 +150,24 @@ class OpenCodeClientV2(
         }
         entries.mapNotNull { runCatching { sessionSnapshotFromInfo(it.jsonObject) }.getOrNull() }
     }.getOrDefault(emptyList())
+
+    override suspend fun replyPermission(
+        sessionId: String,
+        requestId: String,
+        decision: PermissionDecision,
+    ): Boolean = runCatching {
+        // Verified against live server v1.18.31: legacy global endpoint,
+        // field "reply". sessionId is part of the interface for future
+        // v2-scoped endpoints; the legacy path doesn't need it.
+        val url = "${config.normalizedBaseUrl}/permission/$requestId/reply"
+        val payload = buildJsonObject {
+            put("reply", decision.apiValue)
+        }.toString()
+        val request = authedRequest(url)
+            .post(payload.toRequestBody("application/json".toMediaType()))
+            .build()
+        executeAsync(request).use { it.isSuccessful }
+    }.getOrDefault(false)
 
     private fun sessionSnapshotFromInfo(obj: JsonObject): SessionSnapshot {
         val id = obj["id"]?.jsonPrimitive?.content

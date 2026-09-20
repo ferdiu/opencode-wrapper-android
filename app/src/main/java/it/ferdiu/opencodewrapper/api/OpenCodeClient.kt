@@ -41,6 +41,17 @@ interface OpenCodeClient {
      *  are active" picture used on reconnect when no specific session is
      *  being tracked yet. */
     suspend fun listActiveSessions(): List<SessionSnapshot>
+
+    /**
+     * Replies to a pending permission request. Returns true when the server
+     * accepted the reply (2xx). Used by the notification action receiver so
+     * the user can answer permission prompts without opening the app.
+     */
+    suspend fun replyPermission(
+        sessionId: String,
+        requestId: String,
+        decision: PermissionDecision,
+    ): Boolean
 }
 
 data class SessionSnapshot(
