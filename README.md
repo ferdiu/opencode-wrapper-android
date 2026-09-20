@@ -5,6 +5,9 @@ WebView and adds a background foreground service that keeps a live OpenCode
 event connection alive independently of the WebView, delivering native
 Android notifications for things that actually need your attention
 (permission requests, agent questions, session completion, session errors).
+It also ships an **Android Auto** car app: browse sessions and projects,
+have the last message read aloud, answer permission requests, and dictate
+replies from the car screen.
 
 ## What this app is — and what it is not
 
@@ -16,6 +19,10 @@ Android notifications for things that actually need your attention
   event stream and turns permission requests, agent questions, session
   completion, and errors into native Android notifications — even when the
   app is closed.
+- An **Android Auto companion**: a driving-safe car-screen app (AndroidX Car
+  App Library) with Sessions/Projects browsing, TTS readout of the last
+  message, one-tap permission decisions, and dictated replies confirmed
+  before sending.
 - A deep-link launcher: tapping a notification opens the app straight into
   the relevant session in the WebView (verified web-UI route
   `/{base64url(directory)}/session/{id}`; the directory is learned from the
@@ -24,7 +31,8 @@ Android notifications for things that actually need your attention
 **This app IS NOT:**
 
 - A reimplementation of the OpenCode UI — no native session/message/diff
-  views, by design.
+  views on the phone, by design (the car app has its own minimal,
+  driving-safe screens; that's a separate surface, not a phone UI).
 - A client with its own conversation storage — nothing is cached or synced;
   no offline mode.
 - A full-featured mobile OpenCode client.
@@ -35,6 +43,32 @@ take a look at projects like [OpenChamber](https://github.com/btriapitsyn/opench
 instead. This app intentionally stays minimal: it's for those who really
 like the OpenCode web UI and only want native notification support on top
 of it.
+
+## Android Auto
+
+The same APK includes a car-screen app (AndroidX Car App Library). On the
+car launcher it appears as "OpenCode" and offers two starting points:
+
+- **Sessions** — main sessions across all your projects (sub-agent and
+  archived sessions are filtered out), running sessions marked and floated
+  to the top, each row badged with the project's colored initial like the
+  web UI.
+- **Projects** — one row per project, drilling into that project's sessions.
+
+A session detail shows the last message with **Read** (TTS read-aloud),
+**Reply** (dictation with live partial text, read back for confirmation
+before anything is sent), and a full-text view. Sessions with a pending
+permission request instead show the command with **Allow / Deny / Allow
+always** — the same endpoint as the notification actions.
+
+Notes:
+- Top-level navigation uses a tab bar on hosts with car API 8+ and falls
+  back to a two-entry menu on older hosts.
+- Release builds validate the car host against an allow-list (the official
+  Android Auto app); AAOS system hosts pass via their privileged permission.
+  Debug builds accept any host (needed for the Desktop Head Unit).
+- Voice dictation requests the microphone permission at runtime, from the
+  car screen, the first time you reply.
 
 ## Affiliation
 
@@ -53,6 +87,9 @@ app/src/main/java/it/ferdiu/opencodewrapper/
   notifications/  Channels + event -> notification decision logic
   data/           Encrypted config storage (server URL, auth header)
   ui/             MainActivity (WebView) + SettingsActivity
+  auto/           Android Auto car app (Car App Library): car service/session,
+                  tab/menu navigation, session readout + permission variant,
+                  dictation + confirm screens, TTS speaker
 ```
 
 The `api/` package is the isolation boundary called for in the design brief:
