@@ -59,15 +59,21 @@
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
 
+        <!-- Minimum car host API level; read from the APPLICATION metadata by
+             AppInfo.retrieveMinCarAppApiLevel (declaring it inside the service
+             crashes the host handshake). Stays 1: TabTemplate usage is
+             runtime-gated so older hosts get the menu instead of being
+             excluded entirely. -->
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+
         <service
             android:name=".auto.OpenCodeCarAppService"
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
             </intent-filter>
-            <meta-data
-                android:name="androidx.car.app.minCarApiLevel"
-                android:value="1" />
         </service>
 
         <receiver
