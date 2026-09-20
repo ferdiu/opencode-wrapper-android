@@ -2,6 +2,7 @@ package it.ferdiu.opencodewrapper.auto
 
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
+import androidx.car.app.model.Action
 import androidx.car.app.model.CarIcon
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
@@ -119,6 +120,8 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
             .addTab(newTab(TAB_PROJECTS, "Projects"))
             .setActiveTabContentId(activeTabContentId)
             .setTabContents(TabContents.Builder(contentTemplate).build())
+            // TabTemplate.build() requires an app-icon header action when not loading.
+            .setHeaderAction(Action.APP_ICON)
             .build()
     }
 
