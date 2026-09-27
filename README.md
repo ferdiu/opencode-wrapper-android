@@ -1,12 +1,14 @@
 # OpenCode Companion (Android)
 
-<div align="center" style="display: flex; justify-content: center; align-items: center; gap: 12px;">
-  <img src="res/opencode.svg" width="125" />
-  <span style="font-size: 24px;">+</span>
-  <img src="res/android.svg" width="125" />
-  <span style="font-size: 24px;">+</span>
-  <img src="res/android-auto.svg" width="125" />
-</div>
+<table align="center">
+  <tr>
+    <td><img src="res/opencode.svg" width="125"></td>
+    <td><strong>+</strong></td>
+    <td><img src="res/android.svg" width="125"></td>
+    <td><strong>+</strong></td>
+    <td><img src="res/android-auto.svg" width="125"></td>
+  </tr>
+</table>
 
 A small, native Kotlin Android app that wraps the OpenCode web UI in a
 WebView and adds a background foreground service that keeps a live OpenCode
