@@ -1,6 +1,6 @@
 # OpenCode Companion (Android)
 
-<table align="center">
+<table align="center" border="0">
   <tr>
     <td><img src="res/opencode.svg" width="125"></td>
     <td><strong>+</strong></td>
