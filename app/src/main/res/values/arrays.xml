@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Car hosts allowed to connect in release builds. "com.google.android.projection.gearhead"
-         is the Android Auto app (phone projection). AAOS system hosts are admitted separately
-         by HostValidator via their privileged TEMPLATE_RENDERER permission. Package names are
-         verified against the connecting UID by the PackageManager, so a different app cannot
-         impersonate the listed host. -->
+    <!-- Car hosts allowed to connect in release builds, in the documented
+         HostValidator format: "<sha256-cert-digest>,<package-name>".
+         "com.google.android.projection.gearhead" is the Android Auto app (phone
+         projection); the digest below is Google's published release signing
+         certificate for it. AAOS system hosts are admitted separately by
+         HostValidator via their privileged TEMPLATE_RENDERER permission.
+         Package names are verified against the connecting UID by the
+         PackageManager, so a different app cannot impersonate the listed host.
+         To verify/refresh the digest: install Android Auto, then check its
+         APK signing certificate with apksigner (verify -print-certs). -->
     <string-array name="hosts_allowlist">
-        <item>com.google.android.projection.gearhead</item>
+        <item>19:75:b2:f1:71:77:bc:89:a5:df:f3:1f:9e:64:a6:ca:e2:81:a5:3d:c1:d1:d5:9b:1d:14:7f:e1:c8:2a:fa:00,com.google.android.projection.gearhead</item>
     </string-array>
 </resources>
