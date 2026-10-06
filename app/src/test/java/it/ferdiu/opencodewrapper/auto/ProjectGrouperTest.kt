@@ -40,8 +40,12 @@ class ProjectGrouperTest {
 
     @Test
     fun `root worktree sessions group under Global label`() {
-        val groups = ProjectGrouper.group(listOf(session("ses_1", "/")))
+        val groups = ProjectGrouper.group(listOf(
+            session("ses_1", "/"), // basename empty, as copied from listSessions
+            session("ses_2", "/").copy(projectLabel = "Global"), // relabeled by GlobalSessionMerge
+        ))
         assertEquals("Global", groups.single().label)
+        assertEquals(listOf("ses_1", "ses_2"), groups.single().sessions.map { it.id })
     }
 
     @Test

@@ -56,7 +56,20 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
                 // instance - enumerate projects and fetch per worktree.
                 val projects = client.listProjects()
                 val colorByWorktree = projects.associate { it.worktree to it.iconColor }
-                projects.flatMap { project ->
+                // The global project (worktree "/") is not part of GET
+                // /project; fetch it separately and merge its sessions in so
+                // they show up in both tabs.
+                val globalSessions = if (projects.none { it.worktree == "/" }) {
+                    runCatching { client.listSessions(directory = "/") }.getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
+                val globalStatuses = if (globalSessions.isNotEmpty()) {
+                    runCatching { client.listSessionStatuses("/") }.getOrDefault(emptyMap())
+                } else {
+                    emptyMap()
+                }
+                (projects.flatMap { project ->
                     val sessions = runCatching { client.listSessions(directory = project.worktree) }
                         .getOrDefault(emptyList())
                     val statuses = runCatching { client.listSessionStatuses(project.worktree) }
@@ -69,7 +82,9 @@ class HomeScreen(carContext: CarContext, private val speaker: CarSpeaker) : Scre
                     }
                     // Running sessions first (what you need while driving),
                     // then newest first within each group.
-                }.sortedWith(compareByDescending<OcSession> { it.busy }.thenByDescending { it.updatedAt })
+                } + GlobalSessionMerge.merge(projects, globalSessions).map { s ->
+                    s.copy(busy = globalStatuses[s.id] in BUSY_STATUS_TYPES)
+                }).sortedWith(compareByDescending<OcSession> { it.busy }.thenByDescending { it.updatedAt })
             }.fold(
                 onSuccess = { State.Ready(it) },
                 onFailure = { State.Error("Couldn't reach the OpenCode server") },
