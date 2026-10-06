@@ -25,6 +25,15 @@ class GlobalSessionMergeTest {
     }
 
     @Test
+    fun `relables a null session label to Global`() {
+        val merged = GlobalSessionMerge.merge(
+            projects = emptyList(),
+            globalSessions = listOf(session("ses_1", null)),
+        )
+        assertEquals("Global", merged.single().projectLabel)
+    }
+
+    @Test
     fun `keeps a non-empty session label`() {
         val merged = GlobalSessionMerge.merge(
             projects = emptyList(),
