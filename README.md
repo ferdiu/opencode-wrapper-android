@@ -1,5 +1,25 @@
 # OpenCode Companion (Android)
 
+<table align="center" style="border: none; border-collapse: collapse;">
+  <tr>
+    <td style="border: none;">
+      <img src="res/opencode.svg" width="125">
+    </td>
+    <td style="border: none; padding: 0 12px; vertical-align: middle;">
+      <strong>+</strong>
+    </td>
+    <td style="border: none;">
+      <img src="res/android.svg" width="125">
+    </td>
+    <td style="border: none; padding: 0 12px; vertical-align: middle;">
+      <strong>+</strong>
+    </td>
+    <td style="border: none;">
+      <img src="res/android-auto.svg" width="125">
+    </td>
+  </tr>
+</table>
+
 A small, native Kotlin Android app that wraps the OpenCode web UI in a
 WebView and adds a background foreground service that keeps a live OpenCode
 event connection alive independently of the WebView, delivering native

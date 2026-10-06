@@ -54,7 +54,7 @@
                 android:value="Maintains a live event connection to a self-hosted OpenCode server so agent notifications (permission requests, questions, session completion) keep working while the app is backgrounded." />
         </service>
 
-        <!-- Declares Android Auto support (notification read-aloud/reply). -->
+        <!-- Declares Android Auto support (Car App Library templated app). -->
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
@@ -73,6 +73,10 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
+                <!-- Required by the Android Auto host for discovery. IOT is the
+                     closest documented category: the car UI takes actions on a
+                     connected (self-hosted OpenCode) server. -->
+                <category android:name="androidx.car.app.category.IOT" />
             </intent-filter>
         </service>
 
