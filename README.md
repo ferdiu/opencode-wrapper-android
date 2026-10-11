@@ -90,6 +90,44 @@ Notes:
 - Voice dictation requests the microphone permission at runtime, from the
   car screen, the first time you reply.
 
+### Making the car app visible on a real head unit
+
+Android Auto's "Unknown sources" developer setting does **not** cover apps
+built with the Car App Library — only media, messaging-notification, and
+parked apps (see [ANDROID_AUTO.md](ANDROID_AUTO.md), section 3, for the
+full story). A plain sideloaded install therefore shows only the
+notification entry-point on a real car; the Sessions/Projects menu never
+appears (it works fine in the Desktop Head Unit, which enforces nothing).
+
+To get the full car UI on a real head unit, the app must look installed
+from a trusted source. The free option is spoofing the installer field at
+install time:
+
+```
+./gradlew assembleDebug
+adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/
+adb shell pm install -r -i com.android.vending /data/local/tmp/app-debug.apk
+```
+
+Verify on the phone under Settings → Apps → OpenCode: it should read "App
+installed from Google Play Store". Caveats: this must be re-applied after
+**every** install/update (a plain `adb install` or Android Studio run
+resets the field), and reliability varies by Android version (14/15 are
+stricter; tools like KingInstaller or root+LSPosed exist for those). The
+official, future-proof route is Google Play Internal App Sharing (one-time
+$25 Play Console account, no review) — also covered in ANDROID_AUTO.md.
+
+### Responsible use
+
+The car screens are designed to be hands-free and eyes-free: TTS readout,
+voice dictation, and large one-tap permission buttons. The browsing menus
+(Sessions/Projects lists, full-text message view) are provided **for
+convenience when a passenger is with the driver** — not for the driver to
+read or scroll while the vehicle is moving.
+
+**Use this app responsibly and in compliance with your local distracted-
+driving laws. I am not responsible for the way this app is used.**
+
 ## Affiliation
 
 This is an independent, community project. It is **not built by the
