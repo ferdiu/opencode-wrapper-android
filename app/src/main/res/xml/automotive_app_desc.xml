@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <automotiveApp>
+    <!-- Keep BOTH entries. "template" declares the Car App Library screens;
+         "notification" is what makes the app visible at all on real head units
+         for sideloaded installs: Android Auto's "Unknown sources" developer
+         setting covers media/messaging-notification/parked apps but NOT pure
+         Car App Library apps (see ANDROID_AUTO.md, section 3). Removing the
+         notification entry again hides the app on real cars. -->
+    <uses name="notification" />
     <uses name="template" />
 </automotiveApp>
