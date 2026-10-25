@@ -53,4 +53,6 @@
     <string name="status_checking">Checking connection…</string>
     <string name="status_saved_reachable">Saved. Server reachable.</string>
     <string name="status_saved_unreachable">Saved, but couldn\'t reach the server just now. The background service will keep retrying.</string>
+    <string name="action_hide_toolbar">Hide top bar</string>
+    <string name="action_show_toolbar">Show top bar</string>
 </resources>
