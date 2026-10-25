@@ -18,10 +18,10 @@ device even when the app is closed.
 
 - `app/src/main/java/it/ferdiu/opencodewrapper/` — all Kotlin sources
   - `api/` — OpenCode REST/SSE clients and event models
-  - `data/` — ServerConfigStore (persisted server URL + auth token)
+  - `data/` — ServerProfile/ServerProfilesCodec/ServerProfileStore (multi-server profiles in EncryptedSharedPreferences, one active), ServerConfigStore (legacy facade → active profile)
   - `notifications/` — channels and routing of events to notifications
   - `service/` — OpenCodeEventService (foreground service), BootReceiver, ReconnectPolicy
-  - `ui/` — MainActivity (connection/web view), SettingsActivity
+  - `ui/` — MainActivity (server-switcher drawer + web view), SettingsActivity (server list), ServerEditActivity (add/edit form with username/password + advanced auth header)
   - `auto/` — Android Auto car-screen app (Car App Library): OpenCodeCarAppService/Session, navigation + readout/dictation/confirm screens, CarSpeaker (TTS), ProjectGrouper
 - `app/src/main/res/` — layouts, drawables, values, launcher icon
 
