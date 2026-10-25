@@ -90,7 +90,7 @@ class MainActivity : AppCompatActivity() {
             }
             OpenCodeEventService.start(this)
         }
-        invalidateOptionsMenu()
+        supportActionBar?.subtitle = profileStore.getActive()?.name
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -168,20 +168,6 @@ class MainActivity : AppCompatActivity() {
             android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP,
         )
 
-    private fun switchServer(itemIdHash: Int) {
-        val profile = profileStore.list().firstOrNull { it.id.hashCode() == itemIdHash } ?: return
-        if (profile.id == profileStore.getActiveId()) return
-        profileStore.setActive(profile.id)
-        profileStore.setLastSessionId(null)
-        // The Intent extras survive recreate() and would deep-link the NEW
-        // server into the OLD session; drop them before recreating.
-        intent.removeExtra(EXTRA_SESSION_ID)
-        intent.removeExtra(EXTRA_DIRECTORY)
-        OpenCodeEventService.stop(this)
-        OpenCodeEventService.start(this)
-        recreate() // guarantees the WebView reload path (onResume sees a new base URL)
-    }
-
     private fun maybeRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
@@ -202,46 +188,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Static menu: just the server-list (settings) entry. */
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
         return true
     }
 
-    /** Server list is rebuilt here so it is refreshed every time the menu opens. */
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.clear()
-        menuInflater.inflate(R.menu.main_menu, menu)
-        val profiles = profileStore.list()
-        profiles.forEachIndexed { index, profile ->
-            val item = menu.add(0, profile.id.hashCode(), index, profile.name)
-            item.isCheckable = true
-            item.isChecked = profile.id == profileStore.getActiveId()
-        }
-        if (profiles.isNotEmpty()) {
-            menu.setGroupCheckable(0, true, true)
-        }
-        // Note: 'order' high bits encode a menu category — Int.MAX_VALUE is invalid and crashes MenuBuilder.
-        menu.add(1, MENU_MANAGE_SERVERS, profiles.size, getString(R.string.action_manage_servers))
-        supportActionBar?.subtitle = profileStore.getActive()?.name
-        return true
-    }
-
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            R.id.action_settings, MENU_MANAGE_SERVERS -> {
+            R.id.action_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
                 true
             }
-            else -> {
-                switchServer(item.itemId)
-                true
-            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
     companion object {
         const val EXTRA_SESSION_ID = "extra_session_id"
         const val EXTRA_DIRECTORY = "extra_directory"
-        private const val MENU_MANAGE_SERVERS = -1
     }
 }
