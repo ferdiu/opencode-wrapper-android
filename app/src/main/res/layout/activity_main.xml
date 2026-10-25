@@ -68,17 +68,4 @@
                 android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>
-
-    <!-- Shown only while the toolbar is hidden, so the user can bring it back. -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/showToolbarFab"
-        style="@style/Widget.Material3.FloatingActionButton.Small.Secondary"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:contentDescription="@string/action_show_toolbar"
-        android:visibility="gone"
-        app:srcCompat="@drawable/ic_arrow_down"
-        xmlns:app="http://schemas.android.com/apk/res-auto" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

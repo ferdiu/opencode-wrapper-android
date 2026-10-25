@@ -57,7 +57,6 @@ class MainActivity : AppCompatActivity() {
         binding.openSettingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        binding.showToolbarFab.setOnClickListener { setToolbarVisible(true) }
 
         maybeRequestNotificationPermission()
         maybeRequestBatteryOptimizationExemption()
@@ -199,11 +198,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** The toolbar hides via the up-arrow action; while hidden, a small
-     *  floating arrow is the only way back, so it must always be reachable. */
+    /** Hides the toolbar for this session; it comes back on next activity
+     *  creation (deliberately no on-screen way to restore it). */
     private fun setToolbarVisible(visible: Boolean) {
         binding.toolbar.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
-        binding.showToolbarFab.visibility = if (visible) android.view.View.GONE else android.view.View.VISIBLE
     }
 
     companion object {
