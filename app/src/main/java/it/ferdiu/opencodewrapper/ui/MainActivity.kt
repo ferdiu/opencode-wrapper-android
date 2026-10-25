@@ -18,11 +18,13 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import it.ferdiu.opencodewrapper.R
 import it.ferdiu.opencodewrapper.data.ServerConfig
 import it.ferdiu.opencodewrapper.data.ServerConfigStore
+import it.ferdiu.opencodewrapper.data.ServerProfileStore
 import it.ferdiu.opencodewrapper.databinding.ActivityMainBinding
 import it.ferdiu.opencodewrapper.service.OpenCodeEventService
 
@@ -36,6 +38,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var configStore: ServerConfigStore
+    private lateinit var profileStore: ServerProfileStore
+    private lateinit var drawerToggle: ActionBarDrawerToggle
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op either way */ }
@@ -45,6 +49,8 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         configStore = ServerConfigStore(this)
+        profileStore = ServerProfileStore(this)
+        setupDrawer()
 
         setupWebView()
         binding.openSettingsButton.setOnClickListener {
@@ -73,6 +79,7 @@ class MainActivity : AppCompatActivity() {
             }
             OpenCodeEventService.start(this)
         }
+        refreshDrawerMenu()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -148,6 +155,49 @@ class MainActivity : AppCompatActivity() {
             android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP,
         )
 
+    private fun setupDrawer() {
+        setSupportActionBar(binding.toolbar)
+        drawerToggle = ActionBarDrawerToggle(
+            this, binding.drawerLayout, binding.toolbar,
+            R.string.drawer_open, R.string.drawer_close,
+        )
+        binding.drawerLayout.addDrawerListener(drawerToggle)
+        drawerToggle.syncState()
+
+        binding.navigationView.setNavigationItemSelectedListener { item ->
+            if (item.itemId == MENU_MANAGE_SERVERS) {
+                startActivity(Intent(this, SettingsActivity::class.java))
+            } else {
+                switchServer(item.itemId)
+            }
+            binding.drawerLayout.closeDrawers()
+            true
+        }
+    }
+
+    /** Rebuilds the drawer menu from the profile list; called from onResume. */
+    private fun refreshDrawerMenu() {
+        val menu = binding.navigationView.menu
+        menu.clear()
+        profileStore.list().forEachIndexed { index, profile ->
+            val item = menu.add(0, profile.id.hashCode(), index, profile.name)
+            item.isCheckable = true
+            item.isChecked = profile.id == profileStore.getActiveId()
+        }
+        menu.add(1, MENU_MANAGE_SERVERS, Int.MAX_VALUE, getString(R.string.action_manage_servers))
+        supportActionBar?.subtitle = profileStore.getActive()?.name
+    }
+
+    private fun switchServer(itemIdHash: Int) {
+        val profile = profileStore.list().firstOrNull { it.id.hashCode() == itemIdHash } ?: return
+        if (profile.id == profileStore.getActiveId()) return
+        profileStore.setActive(profile.id)
+        profileStore.setLastSessionId(null)
+        OpenCodeEventService.stop(this)
+        OpenCodeEventService.start(this)
+        recreate() // guarantees the WebView reload path (onResume only loads when url == null)
+    }
+
     private fun maybeRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
@@ -184,5 +234,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_SESSION_ID = "extra_session_id"
         const val EXTRA_DIRECTORY = "extra_directory"
+        private const val MENU_MANAGE_SERVERS = -1
     }
 }
