@@ -1,8 +1,13 @@
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_hide_toolbar"
+        android:title="@string/action_hide_toolbar"
+        android:icon="@drawable/ic_arrow_up"
+        app:showAsAction="always" />
     <item
         android:id="@+id/action_settings"
         android:title="@string/settings_title"
-        android:icon="@drawable/ic_settings"
-        app:showAsAction="ifRoom"
-        xmlns:app="http://schemas.android.com/apk/res-auto" />
+        android:icon="@drawable/ic_server_rack"
+        app:showAsAction="ifRoom" />
 </menu>

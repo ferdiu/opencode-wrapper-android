@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat
 import it.ferdiu.opencodewrapper.R
 import it.ferdiu.opencodewrapper.data.ServerConfig
 import it.ferdiu.opencodewrapper.data.ServerConfigStore
+import it.ferdiu.opencodewrapper.data.ServerProfileStore
 import it.ferdiu.opencodewrapper.databinding.ActivityMainBinding
 import it.ferdiu.opencodewrapper.service.OpenCodeEventService
 
@@ -36,6 +37,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var configStore: ServerConfigStore
+    private lateinit var profileStore: ServerProfileStore
+
+    /** Base URL the WebView was last loaded for; used to detect server switches. */
+    private var loadedBaseUrl: String? = null
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op either way */ }
@@ -45,6 +50,8 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         configStore = ServerConfigStore(this)
+        profileStore = ServerProfileStore(this)
+        setSupportActionBar(binding.toolbar)
 
         setupWebView()
         binding.openSettingsButton.setOnClickListener {
@@ -64,7 +71,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.emptyState.visibility = android.view.View.GONE
             binding.webView.visibility = android.view.View.VISIBLE
-            if (binding.webView.url == null) {
+            if (binding.webView.url == null || loadedBaseUrl != config.normalizedBaseUrl) {
                 loadServer(
                     config,
                     intent?.getStringExtra(EXTRA_SESSION_ID),
@@ -73,6 +80,7 @@ class MainActivity : AppCompatActivity() {
             }
             OpenCodeEventService.start(this)
         }
+        supportActionBar?.subtitle = profileStore.getActive()?.name
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -122,11 +130,13 @@ class MainActivity : AppCompatActivity() {
     private fun loadServer(config: ServerConfig, sessionId: String?, directory: String?) {
         val url = if (sessionId != null && directory != null) sessionUrl(config, sessionId, directory)
             else config.normalizedBaseUrl
+        loadedBaseUrl = config.normalizedBaseUrl
         binding.webView.loadUrl(url)
     }
 
     private fun navigateToSession(config: ServerConfig, sessionId: String, directory: String) {
         configStore.setLastSessionId(sessionId)
+        loadedBaseUrl = config.normalizedBaseUrl
         binding.webView.loadUrl(sessionUrl(config, sessionId, directory))
     }
 
@@ -168,17 +178,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Static menu: just the server-list (settings) entry. */
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.action_settings) {
-            startActivity(Intent(this, SettingsActivity::class.java))
-            return true
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            R.id.action_hide_toolbar -> {
+                setToolbarVisible(false)
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
-        return super.onOptionsItemSelected(item)
+    }
+
+    /** Hides the toolbar for this session; it comes back on next activity
+     *  creation (deliberately no on-screen way to restore it). */
+    private fun setToolbarVisible(visible: Boolean) {
+        binding.toolbar.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     companion object {

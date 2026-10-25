@@ -1,8 +1,10 @@
 <resources>
+    <!-- Light (day) palette. On Android 12+ these are overridden by Material You
+         dynamic colors (see OpenCodeApp); they remain the fallback for older devices. -->
     <color name="primary">#2F6F4F</color>
     <color name="primary_dark">#1F4E36</color>
-    <color name="accent">#E8A33D</color>
-    <color name="background">#0F1210</color>
-    <color name="surface">#181C19</color>
-    <color name="on_surface">#EDEFEC</color>
+    <color name="accent">#B27A1F</color>
+    <color name="background">#F6F7F6</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_surface">#1A1C1A</color>
 </resources>

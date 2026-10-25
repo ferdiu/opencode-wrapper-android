@@ -45,6 +45,10 @@
             android:exported="false"
             android:label="@string/settings_title" />
 
+        <activity
+            android:name=".ui.ServerEditActivity"
+            android:exported="false" />
+
         <service
             android:name=".service.OpenCodeEventService"
             android:exported="false"
