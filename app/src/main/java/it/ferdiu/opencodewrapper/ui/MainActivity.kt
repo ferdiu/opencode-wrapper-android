@@ -54,8 +54,10 @@ class MainActivity : AppCompatActivity() {
         configStore = ServerConfigStore(this)
         profileStore = ServerProfileStore(this)
         setSupportActionBar(binding.toolbar)
-        // targetSdk 35 enforces edge-to-edge: keep the toolbar below the status bar.
-        ViewCompat.setOnApplyWindowInsetsListener(binding.toolbar) { view, insets ->
+        // targetSdk 35 enforces edge-to-edge: push the whole content column
+        // (toolbar included) below the status bar. Padding the toolbar itself
+        // would shrink its fixed-height content area instead.
+        ViewCompat.setOnApplyWindowInsetsListener(binding.mainColumn) { view, insets ->
             val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             view.setPadding(view.paddingLeft, top, view.paddingRight, view.paddingBottom)
             insets
