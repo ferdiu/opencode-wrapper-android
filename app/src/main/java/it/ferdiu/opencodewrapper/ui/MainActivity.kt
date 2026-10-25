@@ -20,6 +20,8 @@ import android.webkit.WebViewClient
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import it.ferdiu.opencodewrapper.R
 import it.ferdiu.opencodewrapper.data.ServerConfig
 import it.ferdiu.opencodewrapper.data.ServerConfigStore
@@ -52,6 +54,12 @@ class MainActivity : AppCompatActivity() {
         configStore = ServerConfigStore(this)
         profileStore = ServerProfileStore(this)
         setSupportActionBar(binding.toolbar)
+        // targetSdk 35 enforces edge-to-edge: keep the toolbar below the status bar.
+        ViewCompat.setOnApplyWindowInsetsListener(binding.toolbar) { view, insets ->
+            val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            view.setPadding(view.paddingLeft, top, view.paddingRight, view.paddingBottom)
+            insets
+        }
 
         setupWebView()
         binding.openSettingsButton.setOnClickListener {
