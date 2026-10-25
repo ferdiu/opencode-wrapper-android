@@ -1,73 +1,68 @@
 package it.ferdiu.opencodewrapper.ui
 
 import android.os.Bundle
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import it.ferdiu.opencodewrapper.R
-import it.ferdiu.opencodewrapper.api.OpenCodeClientV2
-import it.ferdiu.opencodewrapper.data.ServerConfig
-import it.ferdiu.opencodewrapper.data.ServerConfigStore
+import it.ferdiu.opencodewrapper.data.ServerProfileStore
 import it.ferdiu.opencodewrapper.databinding.ActivitySettingsBinding
 import it.ferdiu.opencodewrapper.service.OpenCodeEventService
-import kotlinx.coroutines.launch
 
 /**
- * Minimal settings UI, per the design brief ("avoid elaborate settings"):
- * just the server URL and an optional auth header. Saving restarts the
- * background service so it picks up the new config immediately rather than
- * waiting for its next reconnect cycle.
+ * Server list management: add/edit/delete profiles and pick the active one.
+ * The add/edit form lives in ServerEditActivity.
  */
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
-    private lateinit var configStore: ServerConfigStore
+    private lateinit var profileStore: ServerProfileStore
+    private lateinit var adapter: ServerListAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        title = getString(R.string.settings_title)
+        title = getString(R.string.title_servers)
 
-        configStore = ServerConfigStore(this)
-        configStore.get()?.let { config ->
-            binding.serverUrlInput.setText(config.baseUrl)
-            binding.authHeaderInput.setText(config.authHeaderValue ?: "")
+        profileStore = ServerProfileStore(this)
+        adapter = ServerListAdapter(
+            onActivate = { profile ->
+                profileStore.setActive(profile.id)
+                profileStore.setLastSessionId(null)
+                OpenCodeEventService.stop(this)
+                OpenCodeEventService.start(this)
+                refresh()
+            },
+            onEdit = { profile ->
+                startActivity(ServerEditActivity.intent(this, profile.id))
+            },
+            onDelete = { profile -> confirmDelete(profile.id) },
+        )
+        binding.serverList.adapter = adapter
+        binding.addServerFab.setOnClickListener {
+            startActivity(ServerEditActivity.intent(this, null))
         }
-
-        binding.saveButton.setOnClickListener { onSaveClicked() }
     }
 
-    private fun onSaveClicked() {
-        val url = binding.serverUrlInput.text?.toString()?.trim().orEmpty()
-        val auth = binding.authHeaderInput.text?.toString()?.trim().orEmpty()
+    override fun onResume() {
+        super.onResume()
+        refresh()
+    }
 
-        if (url.isEmpty() || (!url.startsWith("http://") && !url.startsWith("https://"))) {
-            binding.serverUrlLayout.error = "Enter a full URL, including http:// or https://"
-            return
-        }
-        binding.serverUrlLayout.error = null
+    private fun refresh() {
+        adapter.submit(profileStore.list(), profileStore.getActiveId())
+    }
 
-        binding.statusText.text = "Checking connection…"
-        binding.saveButton.isEnabled = false
-
-        val candidate = ServerConfig(baseUrl = url, authHeaderValue = auth.ifBlank { null })
-
-        lifecycleScope.launch {
-            val reachable = runCatching { OpenCodeClientV2(candidate).healthCheck() }.getOrDefault(false)
-
-            configStore.save(url, auth.ifBlank { null })
-            OpenCodeEventService.stop(this@SettingsActivity)
-            OpenCodeEventService.start(this@SettingsActivity)
-
-            binding.saveButton.isEnabled = true
-            binding.statusText.text = if (reachable) {
-                "Saved. Server reachable."
-            } else {
-                "Saved, but couldn't reach the server just now. " +
-                    "The background service will keep retrying."
+    private fun confirmDelete(id: String) {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.confirm_delete_server)
+            .setPositiveButton(R.string.action_delete) { _, _ ->
+                val wasActive = profileStore.getActiveId() == id
+                profileStore.delete(id)
+                if (wasActive) OpenCodeEventService.stop(this)
+                refresh()
             }
-
-            if (reachable) finish()
-        }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 }
