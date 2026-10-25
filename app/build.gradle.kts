@@ -70,6 +70,10 @@ dependencies {
     // Android Auto car-screen app (projected from the phone; no phone UI changes).
     implementation("androidx.car.app:app:1.7.0")
 
+    // Server list + switcher UI
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("androidx.drawerlayout:drawerlayout:1.2.0")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
