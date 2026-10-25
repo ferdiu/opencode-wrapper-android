@@ -96,3 +96,46 @@ must be installed from a trusted source:
    re-applied after EVERY install/update — a plain `adb install` or
    Android Studio run resets the installer field.
 3. Root + LSPosed modules (e.g. XLauncher Unlocked) for rooted devices.
+
+## 4. Troubleshooting: app icon does not appear on a real head unit
+
+The required configuration is already in place
+(`automotive_app_desc.xml` declares both `notification` and `template`,
+the manifest wires `com.google.android.gms.car.application` and the
+`CarAppService` intent filter). If the icon still does not appear, work
+through this checklist in order:
+
+1. **Verify the installer spoof actually stuck.** `pm install -i` can
+   report `Success` while silently ignoring the installer field,
+   especially on newer Android versions. Check the real value:
+   `adb shell pm list packages -i it.ferdiu.opencodewrapper`
+   must print `installer=com.android.vending`. If it shows
+   `installer=null` or `com.android.shell`, Android Auto treats the app
+   as untrusted and hides it. Re-apply with:
+   `adb push app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/app.apk`
+   then
+   `adb shell pm install -r -i com.android.vending /data/local/tmp/app.apk`.
+   Confirmed working via adb shell on Android 16 (SDK 36); if your
+   version ignores it, use KingInstaller (Shizuku) or root.
+   **The spoof must be re-applied after EVERY install/update** — a plain
+   `adb install` or Gradle `installDebug` resets the field to `null`.
+2. **Android Auto developer settings (on the phone, not settable via
+   adb):** enable developer mode (tap the version number ~10× in Android
+   Auto settings), then enable **"Unknown sources"**. Also check
+   **"Customize launcher"** — newly appearing apps can be hidden there
+   by default.
+3. **Clear Android Auto's cached app list** after changing any of the
+   above: `adb shell am force-stop com.google.android.projection.gearhead`,
+   then unplug/replug the phone.
+4. **Release builds only — verify the HostValidator digest.** Debug
+   builds allow all hosts (`FLAG_DEBUGGABLE` → `ALLOW_ALL_HOSTS_VALIDATOR`),
+   so this cannot bite in debug. For release, compare the `hosts_allowlist`
+   digest in `app/src/main/res/values/arrays.xml` against the installed
+   gearhead APK's signing certificate (see section 2). A mismatch means
+   the host handshake is rejected and the icon never appears.
+
+Quick isolation test: install a debug build and check the DHU. If the
+app appears in the DHU but not the real car, the code is fine and the
+issue is purely install-source trust (steps 1–3). If it does not appear
+even in the DHU, suspect manifest/discovery or the host validator
+(step 4).
