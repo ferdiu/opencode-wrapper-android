@@ -4,5 +4,10 @@
         <item name="colorPrimaryDark" tools:ignore="PrivateResource">@color/primary_dark</item>
         <item name="colorAccent">@color/accent</item>
         <item name="android:windowBackground">@color/background</item>
+        <!-- Opt out of Android-15 edge-to-edge enforcement: content stays below
+             the status bar in every activity, and the WebView's
+             env(safe-area-inset-top) reports 0 so the web app doesn't add its
+             own duplicate top padding. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
     </style>
 </resources>
