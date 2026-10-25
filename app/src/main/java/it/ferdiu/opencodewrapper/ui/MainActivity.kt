@@ -210,7 +210,8 @@ class MainActivity : AppCompatActivity() {
         if (profiles.isNotEmpty()) {
             menu.setGroupCheckable(0, true, true)
         }
-        menu.add(1, MENU_MANAGE_SERVERS, Int.MAX_VALUE, getString(R.string.action_manage_servers))
+        // Note: 'order' high bits encode a menu category — Int.MAX_VALUE is invalid and crashes MenuBuilder.
+        menu.add(1, MENU_MANAGE_SERVERS, profiles.size, getString(R.string.action_manage_servers))
         supportActionBar?.subtitle = profileStore.getActive()?.name
         return true
     }
