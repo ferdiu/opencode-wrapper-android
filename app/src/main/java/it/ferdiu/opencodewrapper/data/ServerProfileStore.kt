@@ -62,13 +62,23 @@ class ServerProfileStore(context: Context) {
         prefs.edit().putString(KEY_ACTIVE, id).apply()
     }
 
-    fun getActiveId(): String? = prefs.getString(KEY_ACTIVE, null)
+    fun getActiveId(): String? {
+        // Read paths that bypass list() (service, BootReceiver via
+        // ServerConfigStore) must also trigger the lazy legacy migration,
+        // otherwise upgraded single-server users see a null config until a
+        // UI path calls list(). Idempotent and cheap.
+        migrateLegacyIfNeeded()
+        return prefs.getString(KEY_ACTIVE, null)
+    }
 
     /** What all existing consumers need: the active server as a plain config. */
     fun activeConfig(): ServerConfig? =
         getActive()?.toServerConfig(lastSessionId = getLastSessionId())
 
-    fun getLastSessionId(): String? = prefs.getString(KEY_LAST_SESSION, null)
+    fun getLastSessionId(): String? {
+        migrateLegacyIfNeeded()
+        return prefs.getString(KEY_LAST_SESSION, null)
+    }
 
     fun setLastSessionId(sessionId: String?) {
         prefs.edit().putString(KEY_LAST_SESSION, sessionId).apply()

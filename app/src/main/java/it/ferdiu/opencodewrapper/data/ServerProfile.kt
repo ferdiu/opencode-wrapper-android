@@ -23,7 +23,9 @@ data class ServerProfile(
 ) {
     fun toServerConfig(lastSessionId: String? = null): ServerConfig {
         val header = if (!username.isNullOrBlank()) {
-            Credentials.basic(username, password.orEmpty())
+            // Explicit UTF-8: the 2-arg overload encodes as ISO-8859-1 and
+            // would mangle non-ASCII credentials.
+            Credentials.basic(username, password.orEmpty(), Charsets.UTF_8)
         } else {
             authHeaderValue?.takeIf { it.isNotBlank() }
         }

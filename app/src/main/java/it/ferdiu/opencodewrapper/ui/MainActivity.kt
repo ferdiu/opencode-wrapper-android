@@ -41,6 +41,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var profileStore: ServerProfileStore
     private lateinit var drawerToggle: ActionBarDrawerToggle
 
+    /** Base URL the WebView was last loaded for; used to detect server switches. */
+    private var loadedBaseUrl: String? = null
+
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op either way */ }
 
@@ -70,7 +73,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.emptyState.visibility = android.view.View.GONE
             binding.webView.visibility = android.view.View.VISIBLE
-            if (binding.webView.url == null) {
+            if (binding.webView.url == null || loadedBaseUrl != config.normalizedBaseUrl) {
                 loadServer(
                     config,
                     intent?.getStringExtra(EXTRA_SESSION_ID),
@@ -129,11 +132,13 @@ class MainActivity : AppCompatActivity() {
     private fun loadServer(config: ServerConfig, sessionId: String?, directory: String?) {
         val url = if (sessionId != null && directory != null) sessionUrl(config, sessionId, directory)
             else config.normalizedBaseUrl
+        loadedBaseUrl = config.normalizedBaseUrl
         binding.webView.loadUrl(url)
     }
 
     private fun navigateToSession(config: ServerConfig, sessionId: String, directory: String) {
         configStore.setLastSessionId(sessionId)
+        loadedBaseUrl = config.normalizedBaseUrl
         binding.webView.loadUrl(sessionUrl(config, sessionId, directory))
     }
 
@@ -193,9 +198,13 @@ class MainActivity : AppCompatActivity() {
         if (profile.id == profileStore.getActiveId()) return
         profileStore.setActive(profile.id)
         profileStore.setLastSessionId(null)
+        // The Intent extras survive recreate() and would deep-link the NEW
+        // server into the OLD session; drop them before recreating.
+        intent.removeExtra(EXTRA_SESSION_ID)
+        intent.removeExtra(EXTRA_DIRECTORY)
         OpenCodeEventService.stop(this)
         OpenCodeEventService.start(this)
-        recreate() // guarantees the WebView reload path (onResume only loads when url == null)
+        recreate() // guarantees the WebView reload path (onResume sees a new base URL)
     }
 
     private fun maybeRequestNotificationPermission() {
