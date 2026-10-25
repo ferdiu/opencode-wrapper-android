@@ -1,17 +1,11 @@
 package it.ferdiu.opencodewrapper.data
 
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 
 /**
  * Everything the app needs to talk to a single OpenCode server: the base URL,
  * an optional auth header value, and the id of the session the user last had
  * open (so a notification tap or a cold start can jump back to it).
- *
- * This is intentionally the *only* persisted state of substance in the app -
- * per the design brief we do not keep a local copy of conversation content.
  */
 data class ServerConfig(
     val baseUrl: String,
@@ -23,63 +17,31 @@ data class ServerConfig(
 }
 
 /**
- * Wraps [EncryptedSharedPreferences] so the auth header/token never touches
- * disk in plaintext. The WebView gets cookies/session state from its own
- * cookie jar (see MainActivity); this store is what the background service
- * uses to authenticate independently of the WebView.
- *
- * Suppressing deprecation warnings because androidx.security:security-crypto is
- * deprecated but still the most straightforward option for a small app that
- * only needs to protect a single token; replacing it would pull in a larger
- * dependency or require platform-level Keystore code that would meaningfully
- * expand the project scope.
+ * Backwards-compatible facade over [ServerProfileStore] so existing consumers
+ * (service, boot receiver, notification actions, Android Auto) keep working
+ * unchanged: they only ever care about the *active* server.
  */
-@Suppress("DEPRECATION")
 class ServerConfigStore(context: Context) {
 
-    private val appContext = context.applicationContext
+    private val profiles = ServerProfileStore(context)
 
-    private val prefs: SharedPreferences by lazy {
-        val masterKey = MasterKey.Builder(appContext)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+    fun get(): ServerConfig? = profiles.activeConfig()
 
-        EncryptedSharedPreferences.create(
-            appContext,
-            "opencode_secure_prefs",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
-    }
-
-    fun get(): ServerConfig? {
-        val url = prefs.getString(KEY_URL, null) ?: return null
-        return ServerConfig(
-            baseUrl = url,
-            authHeaderValue = prefs.getString(KEY_AUTH, null),
-            lastSessionId = prefs.getString(KEY_LAST_SESSION, null),
-        )
-    }
-
+    /** Legacy single-server save: upserts the active profile's URL/header,
+     *  or creates a profile if none exists. New UI code should use
+     *  [ServerProfileStore] directly. */
     fun save(baseUrl: String, authHeaderValue: String?) {
-        prefs.edit()
-            .putString(KEY_URL, baseUrl.trimEnd('/'))
-            .putString(KEY_AUTH, authHeaderValue?.takeIf { it.isNotBlank() })
-            .apply()
+        val active = profiles.getActive()
+        if (active != null) {
+            profiles.update(active.copy(baseUrl = baseUrl.trimEnd('/'), authHeaderValue = authHeaderValue))
+        } else {
+            profiles.add(ServerProfile(name = baseUrl.trimEnd('/'), baseUrl = baseUrl.trimEnd('/'), authHeaderValue = authHeaderValue))
+        }
     }
 
-    fun setLastSessionId(sessionId: String?) {
-        prefs.edit().putString(KEY_LAST_SESSION, sessionId).apply()
-    }
+    fun setLastSessionId(sessionId: String?) = profiles.setLastSessionId(sessionId)
 
     fun clear() {
-        prefs.edit().clear().apply()
-    }
-
-    companion object {
-        private const val KEY_URL = "server_url"
-        private const val KEY_AUTH = "auth_header"
-        private const val KEY_LAST_SESSION = "last_session_id"
+        profiles.getActiveId()?.let { profiles.delete(it) }
     }
 }
