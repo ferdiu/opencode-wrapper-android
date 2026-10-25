@@ -18,7 +18,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import it.ferdiu.opencodewrapper.R
@@ -39,7 +38,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var configStore: ServerConfigStore
     private lateinit var profileStore: ServerProfileStore
-    private lateinit var drawerToggle: ActionBarDrawerToggle
 
     /** Base URL the WebView was last loaded for; used to detect server switches. */
     private var loadedBaseUrl: String? = null
@@ -53,7 +51,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         configStore = ServerConfigStore(this)
         profileStore = ServerProfileStore(this)
-        setupDrawer()
+        setSupportActionBar(binding.toolbar)
 
         setupWebView()
         binding.openSettingsButton.setOnClickListener {
@@ -82,7 +80,7 @@ class MainActivity : AppCompatActivity() {
             }
             OpenCodeEventService.start(this)
         }
-        refreshDrawerMenu()
+        invalidateOptionsMenu()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -160,39 +158,6 @@ class MainActivity : AppCompatActivity() {
             android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP,
         )
 
-    private fun setupDrawer() {
-        setSupportActionBar(binding.toolbar)
-        drawerToggle = ActionBarDrawerToggle(
-            this, binding.drawerLayout, binding.toolbar,
-            R.string.drawer_open, R.string.drawer_close,
-        )
-        binding.drawerLayout.addDrawerListener(drawerToggle)
-        drawerToggle.syncState()
-
-        binding.navigationView.setNavigationItemSelectedListener { item ->
-            if (item.itemId == MENU_MANAGE_SERVERS) {
-                startActivity(Intent(this, SettingsActivity::class.java))
-            } else {
-                switchServer(item.itemId)
-            }
-            binding.drawerLayout.closeDrawers()
-            true
-        }
-    }
-
-    /** Rebuilds the drawer menu from the profile list; called from onResume. */
-    private fun refreshDrawerMenu() {
-        val menu = binding.navigationView.menu
-        menu.clear()
-        profileStore.list().forEachIndexed { index, profile ->
-            val item = menu.add(0, profile.id.hashCode(), index, profile.name)
-            item.isCheckable = true
-            item.isChecked = profile.id == profileStore.getActiveId()
-        }
-        menu.add(1, MENU_MANAGE_SERVERS, Int.MAX_VALUE, getString(R.string.action_manage_servers))
-        supportActionBar?.subtitle = profileStore.getActive()?.name
-    }
-
     private fun switchServer(itemIdHash: Int) {
         val profile = profileStore.list().firstOrNull { it.id.hashCode() == itemIdHash } ?: return
         if (profile.id == profileStore.getActiveId()) return
@@ -232,12 +197,35 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.action_settings) {
-            startActivity(Intent(this, SettingsActivity::class.java))
-            return true
+    /** Server list is rebuilt here so it is refreshed every time the menu opens. */
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.clear()
+        menuInflater.inflate(R.menu.main_menu, menu)
+        val profiles = profileStore.list()
+        profiles.forEachIndexed { index, profile ->
+            val item = menu.add(0, profile.id.hashCode(), index, profile.name)
+            item.isCheckable = true
+            item.isChecked = profile.id == profileStore.getActiveId()
         }
-        return super.onOptionsItemSelected(item)
+        if (profiles.isNotEmpty()) {
+            menu.setGroupCheckable(0, true, true)
+        }
+        menu.add(1, MENU_MANAGE_SERVERS, Int.MAX_VALUE, getString(R.string.action_manage_servers))
+        supportActionBar?.subtitle = profileStore.getActive()?.name
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings, MENU_MANAGE_SERVERS -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            else -> {
+                switchServer(item.itemId)
+                true
+            }
+        }
     }
 
     companion object {
