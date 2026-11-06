@@ -12,15 +12,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-class OpenCodeClientV2SessionsTest {
+class OpenCodeClientV1SessionsTest {
 
     private lateinit var server: MockWebServer
 
     @Before fun setUp() { server = MockWebServer(); server.start() }
     @After fun tearDown() = server.shutdown()
 
-    private fun client(): OpenCodeClientV2 =
-        OpenCodeClientV2(ServerConfig(baseUrl = server.url("/").toString().trimEnd('/'), authHeaderValue = null))
+    private fun client(): OpenCodeClientV1 =
+        OpenCodeClientV1(ServerConfig(baseUrl = server.url("/").toString().trimEnd('/'), authHeaderValue = null))
 
     @Test
     fun `list projects maps id worktree and basename label`() = runTest {

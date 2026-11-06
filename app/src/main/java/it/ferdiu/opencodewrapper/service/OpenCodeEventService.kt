@@ -9,8 +9,9 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import it.ferdiu.opencodewrapper.api.ApiVersionDetector
+import it.ferdiu.opencodewrapper.api.ApiVersionException
 import it.ferdiu.opencodewrapper.api.OpenCodeClient
-import it.ferdiu.opencodewrapper.api.OpenCodeClientV2
 import it.ferdiu.opencodewrapper.data.ServerConfig
 import it.ferdiu.opencodewrapper.data.ServerConfigStore
 import it.ferdiu.opencodewrapper.notifications.NotificationHelper
@@ -81,7 +82,17 @@ class OpenCodeEventService : LifecycleService() {
                     continue
                 }
 
-                val client: OpenCodeClient = OpenCodeClientV2(config)
+                // Detection is cached per base URL, so reconnects don't re-probe.
+                val client: OpenCodeClient = try {
+                    ApiVersionDetector.clientFor(config)
+                } catch (e: ApiVersionException) {
+                    // Strict-v2 profile on a non-v2 server: surface it and
+                    // stop the connection loop for this server instead of
+                    // retry-flooding (the loop restarts with the service).
+                    Log.w(TAG, "Server rejected: ${e.message}")
+                    updateServiceNotification(getString(it.ferdiu.opencodewrapper.R.string.service_notif_not_v2_server))
+                    return@launch
+                }
 
                 // Recovery pass: catch up on anything that might have
                 // happened while we weren't connected (first loop iteration,

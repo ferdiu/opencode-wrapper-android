@@ -26,6 +26,24 @@ class ServerProfilesCodecTest {
     }
 
     @Test
+    fun `profile serialized without v1CompatMode deserializes with default true`() {
+        // Profiles saved before the field existed must stay v1-compatible.
+        val legacyJson = """[{"id":"a","name":"Home","baseUrl":"http://a:4096"}]"""
+        val decoded = ServerProfilesCodec.decodeProfiles(legacyJson)
+        assertEquals(1, decoded.size)
+        assertEquals(true, decoded.single().v1CompatMode)
+        assertEquals(true, decoded.single().toServerConfig().v1CompatMode)
+    }
+
+    @Test
+    fun `explicit v1CompatMode false round-trips`() {
+        val profiles = listOf(profile("a").copy(v1CompatMode = false))
+        val decoded = ServerProfilesCodec.decodeProfiles(ServerProfilesCodec.encodeProfiles(profiles))
+        assertEquals(false, decoded.single().v1CompatMode)
+        assertEquals(false, decoded.single().toServerConfig().v1CompatMode)
+    }
+
+    @Test
     fun `migrateLegacy builds one profile from legacy keys`() {
         val m = ServerProfilesCodec.migrateLegacy(
             legacyUrl = "http://192.168.1.10:4096/",

@@ -10,16 +10,13 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.addJsonArray
-import kotlinx.serialization.json.addJsonObject
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -37,41 +34,50 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Real HTTP/SSE implementation, targeting the endpoints verified against the
- * anomalyco/opencode (formerly sst/opencode) source at tag v1.18.18:
+ * Implements the OpenCode **2.x** server API (`/api/…` endpoints), verified
+ * against upstream anomalyco/opencode tag v2.2.5
+ * (packages/protocol/src/groups and packages/schema):
  *
- *  - `GET  /global/health`            confirmed  - liveness/version check
- *  - `GET  /event`                    confirmed  - instance-scoped SSE stream
- *      (this is the *non*-legacy path: legacy is `GET /global/event`, which
- *      this app deliberately avoids per the design brief). Adding
- *      `?session={id}` filters the stream to that session's events plus
- *      connection-level `server.*` events - this filtering was added
- *      specifically for the V2 SDK (upstream PR #6729,
- *      "@opencode-ai/sdk/v2 - Fully supported") and is the "V2 event API"
- *      referenced in the brief; there is no separate `/v2/event` URL.
- *  - `GET  /session/status`           confirmed  - all session statuses
- *  - `GET  /session/{id}`             confirmed  - single session detail
- *  - `GET  /session`                  confirmed  - list sessions
+ *  - `GET  /api/info`                              - server identity (also
+ *     the API-generation probe used by [ApiVersionDetector]); v1 servers 404
+ *  - `GET  /api/event`                             - SSE stream of flat
+ *     events { id, created, type, location?, data } across all locations
+ *     (replaces v1 /global/event)
+ *  - `GET  /api/session`                           - { data: SessionInfo[],
+ *     cursor }; query: limit, directory, archived, parentID, order, …
+ *  - `GET  /api/session/{id}`                      - { data: SessionInfo }
+ *  - `GET  /api/session/active`                    - { data: { sessionID:
+ *     { type: "running" } } } - the v2 busy picture (no /session/status)
+ *  - `GET  /api/session/{id}/message`              - { data: Message[],
+ *     cursor }; order defaults to desc upstream, so we request asc to keep
+ *     the oldest-first assumption of [MessageTextExtractor]
+ *  - `POST /api/session/{id}/prompt`               - body PromptInput.Prompt
+ *     = { text, … } (replaces v1 /session/{id}/message {parts})
+ *  - `GET  /api/session/{id}/permission`           - { data: Request[] };
+ *  - `POST /api/session/{id}/permission/{rid}/reply` - body { decision:
+ *     "once"|"always"|"reject", message? } -> 204 (Permission.Reply literals
+ *     confirmed in schema/src/permission.ts and identical to
+ *     [PermissionDecision.apiValue])
+ *  - `GET  /api/session/{id}/form` / `…/form/{fid}` - pending forms (v2
+ *     generalizes v1 "questions" into "forms")
+ *  - `POST /api/session/{id}/form/{fid}/reply`     - body Form.Reply =
+ *     { answer: { fieldKey: value } } -> 204
+ *  - `GET  /api/project`                           - bare array of
+ *     ProjectInfo { id, canonical, name?, icon?, … } (note: "worktree"
+ *     became "canonical")
  *
- * ASSUMPTION CALLED OUT EXPLICITLY: I could not find a documented, stable
- * "durable event log with a replay cursor" endpoint distinct from the
- * session/status/detail endpoints above. What v1.18.18 actually exposes for
- * "catch up after a reconnect" is: (a) session status/detail, which is
- * itself durable server state, and (b) the session-scoped `/event` filter.
- * So the recovery strategy implemented here is: reconnect the SSE stream,
- * and separately re-fetch session status/detail for whatever sessions we
- * care about to detect any idle/error/permission transition that happened
- * while disconnected. If a future OpenCode release adds an explicit
- * cursor/replay endpoint, only [getSessionSnapshot]/[listActiveSessions]
- * and the reconnect flow in OpenCodeEventService should need to change.
+ * Session-scoped routes resolve the session's project location
+ * server-side (session-location middleware), so unlike [OpenCodeClientV1]
+ * no `?directory=` scoping parameter is needed on replies.
  *
- * Auth: OpenCode's own HTTP server does not document a built-in bearer-auth
- * scheme for v1.18.18 (the `/auth/{providerID}` endpoints configure *LLM
- * provider* credentials, not access to the OpenCode server itself). Server
- * access control is typically handled by whatever reverse proxy sits in
- * front of `opencode serve`. So this client just attaches the raw header
- * the user configured, if any, on every request - it works with any
- * bearer/API-key style proxy without hard-coding a specific header name.
+ * Status model: v2 has no session.status endpoint. Busy/idle is derived
+ * from SessionInfo.time - time.busy is set while an execution runs and
+ * time.idle holds the last completed execution's end.
+ *
+ * Auth: OpenCode 2.x serves HTTP Basic auth with username `opencode` and
+ * password from OPENCODE_PASSWORD. The app's raw auth-header setting
+ * already produces "Authorization: Basic base64(opencode:password)", so
+ * no auth handling changes were needed.
  */
 class OpenCodeClientV2(
     private val config: ServerConfig,
@@ -87,17 +93,15 @@ class OpenCodeClientV2(
         .build()
 
     override fun events(): Flow<OcEnvelope> = callbackFlow {
-        // /global/event (root scope) forwards ALL instance events on the
-        // GlobalBus, regardless of project directory. The instance-scoped
-        // /event endpoint silently filters events to one instance directory
-        // (server-side: event.location?.directory === instance.directory),
-        // which made every session/permission/question event invisible to us.
-        // Global payloads arrive wrapped in an envelope:
-        //   { "directory": "...", "payload": { "id", "type", "properties" } }
-        // OcEventParser unwraps it.
+        // GET /api/event streams every location's events; each SSE data
+        // line is one flat event object whose `location.directory` (when
+        // present) plays the role of the v1 /global/event envelope's
+        // "directory" field. Volatile by contract (slow consumers overflow,
+        // disconnects miss events) - same operational semantics as v1, so
+        // the service-level reconnect + recovery-pass strategy stays valid.
         val url = buildString {
             append(config.normalizedBaseUrl)
-            append("/global/event")
+            append("/api/event")
         }
 
         val request = authedRequest(url).build()
@@ -109,14 +113,11 @@ class OpenCodeClientV2(
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
                 if (data.isBlank()) return
-                val parsed = runCatching {
-                    val element = json.parseToJsonElement(data).jsonObject
-                    val directory = (element["directory"] as? kotlinx.serialization.json.JsonPrimitive)
-                        ?.let { runCatching { it.content }.getOrNull() }
-                    OcEnvelope(directory, OcEventParser.parse(element))
-                }.onFailure { e ->
-                    Log.w(TAG, "Skipping malformed SSE payload: ${e.message}")
-                }.getOrNull() ?: return
+                val parsed = OcEventParser.parseV2Event(data, fallbackDirectory = null)
+                if (parsed == null) {
+                    Log.w(TAG, "Skipping malformed SSE payload")
+                    return
+                }
                 trySend(parsed)
             }
 
@@ -134,35 +135,42 @@ class OpenCodeClientV2(
     }
 
     override suspend fun healthCheck(): Boolean = runCatching {
-        val request = authedRequest("${config.normalizedBaseUrl}/global/health").build()
-        executeAsync(request).use { it.isSuccessful }
+        val request = authedRequest("${config.normalizedBaseUrl}/api/info").build()
+        val body = executeAsync(request).use { resp ->
+            if (!resp.isSuccessful) return@runCatching false
+            resp.body.string()
+        }
+        // A v1 server (or an SPA catch-all) can answer 200 without being v2;
+        // only a JSON object with a string version field counts.
+        val version = runCatching {
+            json.parseToJsonElement(body).jsonObject["version"]?.jsonPrimitive?.content
+        }.getOrNull()
+        version != null
     }.getOrDefault(false)
 
     override suspend fun getSessionSnapshot(sessionId: String): SessionSnapshot? = runCatching {
-        val request = authedRequest("${config.normalizedBaseUrl}/session/$sessionId").build()
+        val request = authedRequest("${config.normalizedBaseUrl}/api/session/$sessionId").build()
         val body = executeAsync(request).use { resp ->
             if (!resp.isSuccessful) return null
             resp.body.string()
         }
         if (body.isEmpty()) return null
-        val obj = json.parseToJsonElement(body).jsonObject
+        val obj = json.parseToJsonElement(body).jsonObject["data"]?.jsonObject ?: return null
         sessionSnapshotFromInfo(obj)
     }.getOrNull()
 
     override suspend fun listActiveSessions(): List<SessionSnapshot> = runCatching {
-        val statusRequest = authedRequest("${config.normalizedBaseUrl}/session/status").build()
-        val body = executeAsync(statusRequest).use { resp ->
+        // GET /api/session/active = foreground drains owned by this process;
+        // absence from the map means inactive, so every entry is "busy".
+        val request = authedRequest("${config.normalizedBaseUrl}/api/session/active").build()
+        val body = executeAsync(request).use { resp ->
             if (!resp.isSuccessful) return@runCatching emptyList()
             resp.body.string()
         }
         if (body.isEmpty()) return@runCatching emptyList()
-
-        val root = json.parseToJsonElement(body)
-        val entries = when {
-            root is kotlinx.serialization.json.JsonArray -> root
-            else -> root.jsonObject["sessions"]?.jsonArray ?: return@runCatching emptyList()
-        }
-        entries.mapNotNull { runCatching { sessionSnapshotFromInfo(it.jsonObject) }.getOrNull() }
+        val root = json.parseToJsonElement(body).jsonObject
+        val entries = root["data"]?.jsonObject ?: return@runCatching emptyList()
+        entries.keys.map { SessionSnapshot(it, title = null, statusType = "busy") }
     }.getOrDefault(emptyList())
 
     override suspend fun replyPermission(
@@ -171,14 +179,14 @@ class OpenCodeClientV2(
         decision: PermissionDecision,
         directory: String?,
     ): Boolean = runCatching {
-        // Verified against live server v1.18.31: legacy global endpoint,
-        // field "reply". The directory query parameter is REQUIRED on
-        // multi-project servers - without it the server resolves against
-        // the default instance and 404s with PermissionNotFoundError.
-        // sessionId is part of the interface for future v2-scoped endpoints.
-        val url = scopedReplyUrl("permission", requestId, directory)
+        // Confirmed against upstream v2.2.5: session-scoped route (the
+        // session's location is resolved server-side), body { decision,
+        // message? } -> 204. Permission.Reply literals "once"/"always"/
+        // "reject" match PermissionDecision.apiValue exactly.
+        val url = "${config.normalizedBaseUrl}/api/session/$sessionId/permission/$requestId/reply"
         val payload = buildJsonObject {
-            put("reply", decision.apiValue)
+            put("decision", decision.apiValue)
+            put("message", JsonNull)
         }.toString()
         val request = authedRequest(url)
             .post(payload.toRequestBody("application/json".toMediaType()))
@@ -192,17 +200,15 @@ class OpenCodeClientV2(
         answer: String,
         directory: String?,
     ): Boolean = runCatching {
-        // Verified against live server v1.18.31: legacy global endpoint,
-        // body {"answers": [[answer]]} (answers is an array of string-arrays).
-        // The directory query parameter scopes the call to the project
-        // instance that raised the request (see replyPermission).
-        // sessionId is part of the interface for future v2-scoped endpoints.
-        val url = scopedReplyUrl("question", requestId, directory)
+        // v2 forms are keyed maps: { answer: { fieldKey: value } }. The
+        // question tool names its fields q0, q1, … (packages/core/src/tool/
+        // plugin/question.ts); resolve the actual first field key from the
+        // form detail when available, falling back to "q0".
+        val key = formFirstFieldKey(sessionId, requestId) ?: "q0"
+        val url = "${config.normalizedBaseUrl}/api/session/$sessionId/form/$requestId/reply"
         val payload = buildJsonObject {
-            putJsonArray("answers") {
-                addJsonArray {
-                    add(answer)
-                }
+            putJsonObject("answer") {
+                put(key, answer)
             }
         }.toString()
         val request = authedRequest(url)
@@ -212,7 +218,7 @@ class OpenCodeClientV2(
     }.getOrDefault(false)
 
     override suspend fun listProjects(): List<OcProject> {
-        val request = authedRequest("${config.normalizedBaseUrl}/project").build()
+        val request = authedRequest("${config.normalizedBaseUrl}/api/project").build()
         val body = executeAsync(request).use { resp ->
             if (!resp.isSuccessful) throw IOException("listProjects: HTTP ${resp.code}")
             resp.body.string()
@@ -222,7 +228,10 @@ class OpenCodeClientV2(
         if (root !is kotlinx.serialization.json.JsonArray) return emptyList()
         return root.mapNotNull { runCatching {
             val obj = it.jsonObject
-            val worktree = obj["worktree"]?.jsonPrimitive?.content ?: error("missing worktree")
+            // v2 renamed "worktree" to "canonical"; OcProject.worktree keeps
+            // the v1 name because the rest of the app (car grouping, session
+            // scoping) is built around it.
+            val worktree = obj["canonical"]?.jsonPrimitive?.content ?: error("missing canonical")
             val iconColor = runCatching {
                 (obj["icon"] as? JsonObject)?.get("color")
                     ?.takeIf { color -> color !is JsonNull }?.jsonPrimitive?.content
@@ -230,30 +239,15 @@ class OpenCodeClientV2(
             OcProject(
                 id = obj["id"]?.jsonPrimitive?.content ?: worktree,
                 worktree = worktree,
-                label = worktree.substringAfterLast('/').ifEmpty { "Global" },
+                label = obj["name"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+                    ?: worktree.substringAfterLast('/').ifEmpty { "Global" },
                 iconColor = iconColor,
             )
         }.getOrNull() }
     }
 
     override suspend fun listSessions(limit: Int, directory: String?): List<OcSession> {
-        val httpUrl = "${config.normalizedBaseUrl}/session".toHttpUrl().newBuilder()
-            .addQueryParameter("limit", limit.toString())
-            .apply { if (directory != null) addQueryParameter("directory", directory) }
-            .build()
-        val request = authedRequest(httpUrl.toString()).build()
-        val body = executeAsync(request).use { resp ->
-            if (!resp.isSuccessful) throw IOException("listSessions: HTTP ${resp.code}")
-            resp.body.string()
-        }
-        if (body.isEmpty()) return emptyList()
-        val root = json.parseToJsonElement(body)
-        val entries = when {
-            root is kotlinx.serialization.json.JsonArray -> root
-            else -> root.jsonObject["sessions"]?.jsonArray
-                ?: root.jsonObject["data"]?.jsonArray
-                ?: return emptyList()
-        }
+        val entries = fetchSessionInfos(limit, directory)
         return entries.mapNotNull { entry ->
             runCatching {
                 val obj = entry.jsonObject
@@ -268,28 +262,38 @@ class OpenCodeClientV2(
     }
 
     override suspend fun listSessionStatuses(directory: String?): Map<String, String> = runCatching {
-        val httpUrl = "${config.normalizedBaseUrl}/session/status".toHttpUrl().newBuilder()
+        // No v2 equivalent of v1 GET /session/status: derive busy/idle from
+        // SessionInfo.time (time.busy set while an execution runs; time.idle
+        // = last completed execution's end).
+        fetchSessionInfos(limit = 50, directory = directory).mapNotNull { entry ->
+            val obj = entry.jsonObject
+            val id = obj["id"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            id to statusTypeFromTime(obj["time"] as? JsonObject)
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    /** Raw `data` array of GET /api/session for one project instance. */
+    private suspend fun fetchSessionInfos(limit: Int, directory: String?): kotlinx.serialization.json.JsonArray {
+        val httpUrl = "${config.normalizedBaseUrl}/api/session".toHttpUrl().newBuilder()
+            .addQueryParameter("limit", limit.toString())
             .apply { if (directory != null) addQueryParameter("directory", directory) }
             .build()
         val request = authedRequest(httpUrl.toString()).build()
         val body = executeAsync(request).use { resp ->
-            if (!resp.isSuccessful) return@runCatching emptyMap()
+            if (!resp.isSuccessful) throw IOException("listSessions: HTTP ${resp.code}")
             resp.body.string()
         }
-        if (body.isEmpty()) return@runCatching emptyMap()
-        val root = json.parseToJsonElement(body)
-        if (root !is JsonObject) return@runCatching emptyMap()
-        root.entries.mapNotNull { (id, value) ->
-            val type = runCatching {
-                (value as? JsonObject)?.get("type")?.jsonPrimitive?.content
-            }.getOrNull()
-            type?.let { id to it }
-        }.toMap()
-    }.getOrDefault(emptyMap())
+        if (body.isEmpty()) return kotlinx.serialization.json.JsonArray(emptyList())
+        return json.parseToJsonElement(body).jsonObject["data"]?.jsonArray
+            ?: kotlinx.serialization.json.JsonArray(emptyList())
+    }
 
     override suspend fun getLastMessage(sessionId: String, directory: String?): SessionMessage? {
-        val httpUrl = "${config.normalizedBaseUrl}/session/$sessionId/message".toHttpUrl().newBuilder()
-            .apply { if (directory != null) addQueryParameter("directory", directory) }
+        // order defaults to desc upstream; request asc to keep the
+        // oldest-first assumption MessageTextExtractor was written against.
+        val httpUrl = "${config.normalizedBaseUrl}/api/session/$sessionId/message".toHttpUrl().newBuilder()
+            .addQueryParameter("order", "asc")
+            .addQueryParameter("limit", "200")
             .build()
         val request = authedRequest(httpUrl.toString()).build()
         val body = executeAsync(request).use { resp ->
@@ -297,54 +301,36 @@ class OpenCodeClientV2(
             resp.body.string()
         }
         if (body.isEmpty()) return null
-        val root = json.parseToJsonElement(body)
-        val messages = when {
-            root is kotlinx.serialization.json.JsonArray -> root
-            else -> root.jsonObject["messages"]?.jsonArray
-                ?: root.jsonObject["data"]?.jsonArray
-                ?: root.jsonObject["items"]?.jsonArray
-                ?: return null
-        }
+        val messages = json.parseToJsonElement(body).jsonObject["data"]?.jsonArray ?: return null
         return MessageTextExtractor.lastReadableMessage(messages)
     }
 
     override suspend fun sendPrompt(sessionId: String, text: String, directory: String?): Boolean = runCatching {
-        // Verified live (Variant A): POST /session/{id}/message {parts}.
-        val httpUrl = "${config.normalizedBaseUrl}/session/$sessionId/message".toHttpUrl().newBuilder()
-            .apply { if (directory != null) addQueryParameter("directory", directory) }
-            .build()
+        // Confirmed against upstream v2.2.5: POST /api/session/{id}/prompt
+        // with PromptInput.Prompt = { text, files?, agents?, skills? }.
+        val url = "${config.normalizedBaseUrl}/api/session/$sessionId/prompt"
         val payload = buildJsonObject {
-            putJsonArray("parts") {
-                addJsonObject {
-                    put("type", "text")
-                    put("text", text)
-                }
-            }
+            put("text", text)
         }.toString()
-        val request = authedRequest(httpUrl.toString())
+        val request = authedRequest(url)
             .post(payload.toRequestBody("application/json".toMediaType()))
             .build()
         executeAsync(request).use { it.isSuccessful }
     }.getOrDefault(false)
 
     override suspend fun listPendingPermissions(sessionId: String, directory: String?): List<PendingPermission> = runCatching {
-        // Verified live: GET /permission?directory=<worktree> returns a bare
-        // array of pending requests; the directory parameter is what makes
-        // non-default project instances visible (same scoping as replies).
-        val httpUrl = "${config.normalizedBaseUrl}/permission".toHttpUrl().newBuilder()
-            .apply { if (directory != null) addQueryParameter("directory", directory) }
-            .build()
-        val request = authedRequest(httpUrl.toString()).build()
+        // Session-scoped: the endpoint only returns this session's pending
+        // requests, so no directory scoping is required (unlike v1 GET
+        // /permission?directory= which needed the instance query param).
+        val request = authedRequest("${config.normalizedBaseUrl}/api/session/$sessionId/permission").build()
         val body = executeAsync(request).use { resp ->
             if (!resp.isSuccessful) return emptyList()
             resp.body.string()
         }
         if (body.isEmpty()) return emptyList()
-        val root = json.parseToJsonElement(body)
-        if (root !is kotlinx.serialization.json.JsonArray) return emptyList()
-        root.filter { entry ->
-            // JsonNull.content returns the literal "null" (see ocSessionFromInfo),
-            // so nulls are filtered out before reading the primitive.
+        val root = json.parseToJsonElement(body).jsonObject
+        val entries = root["data"]?.jsonArray ?: return emptyList()
+        entries.filter { entry ->
             (entry as? JsonObject)?.get("sessionID")
                 ?.takeIf { it !is JsonNull }
                 ?.jsonPrimitive?.contentOrNull() == sessionId
@@ -352,20 +338,34 @@ class OpenCodeClientV2(
             .mapNotNull { runCatching { pendingPermissionFromInfo(it.jsonObject) }.getOrNull() }
     }.getOrDefault(emptyList())
 
+    /** Fetches a form's detail and returns its first field key, or null when
+     *  the form is gone/unreachable (the "q0" fallback then applies). */
+    private suspend fun formFirstFieldKey(sessionId: String, formId: String): String? = runCatching {
+        val request = authedRequest("${config.normalizedBaseUrl}/api/session/$sessionId/form/$formId").build()
+        val body = executeAsync(request).use { resp ->
+            if (!resp.isSuccessful) return@runCatching null
+            resp.body.string()
+        }
+        if (body.isEmpty()) return@runCatching null
+        val form = json.parseToJsonElement(body).jsonObject["data"]?.jsonObject ?: return@runCatching null
+        (form["fields"] as? kotlinx.serialization.json.JsonArray)
+            ?.firstOrNull()?.let { (it as? JsonObject)?.get("key") }
+            ?.let { if (it is JsonNull) null else it.jsonPrimitive.contentOrNull() }
+    }.getOrNull()
+
     private fun pendingPermissionFromInfo(obj: JsonObject): PendingPermission {
         val id = obj["id"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
             ?: error("missing permission id")
-        val permission = runCatching {
-            obj["permission"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+        // v2: { action, resources[] } replaces v1's { permission, patterns }.
+        val action = runCatching {
+            obj["action"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
         }.getOrNull() ?: "permission"
-        val patterns = (obj["patterns"] as? kotlinx.serialization.json.JsonArray)
-            ?.mapNotNull { pattern ->
-                pattern.takeIf { it !is JsonNull }?.let { (it as? JsonPrimitive)?.contentOrNull() }
+        val resources = (obj["resources"] as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { resource ->
+                resource.takeIf { it !is JsonNull }?.let { (it as? JsonPrimitive)?.contentOrNull() }
             }
             .orEmpty()
-        // Multi-pattern requests (e.g. "allow always") hide context behind the
-        // patterns list - show all of them, not just the first.
-        val label = if (patterns.isEmpty()) permission else "$permission: " + patterns.joinToString(", ")
+        val label = if (resources.isEmpty()) action else "$action: " + resources.joinToString(", ")
         return PendingPermission(id, label)
     }
 
@@ -379,7 +379,8 @@ class OpenCodeClientV2(
             obj["title"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
         }.getOrNull()
         val directory = runCatching {
-            obj["directory"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+            (obj["location"] as? JsonObject)?.get("directory")
+                ?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
         }.getOrNull()
         val updatedAt = runCatching {
             (obj["time"] as? JsonObject)?.get("updated")?.jsonPrimitive?.long ?: 0L
@@ -387,23 +388,17 @@ class OpenCodeClientV2(
         return OcSession(id, title, directory?.substringAfterLast('/'), directory, updatedAt)
     }
 
-    private fun scopedReplyUrl(kind: String, requestId: String, directory: String?): String =
-        "${config.normalizedBaseUrl}/$kind/$requestId/reply"
-            .toHttpUrl()
-            .newBuilder()
-            .apply { if (directory != null) addQueryParameter("directory", directory) }
-            .build()
-            .toString()
-
     private fun sessionSnapshotFromInfo(obj: JsonObject): SessionSnapshot {
-        val id = obj["id"]?.jsonPrimitive?.content
-            ?: obj["sessionID"]?.jsonPrimitive?.content
-            ?: error("missing session id")
+        val id = obj["id"]?.jsonPrimitive?.content ?: error("missing session id")
         val title = runCatching { obj["title"]?.jsonPrimitive?.content }.getOrNull()
-        val statusType = runCatching {
-            (obj["status"]?.jsonObject?.get("type") as? kotlinx.serialization.json.JsonPrimitive)?.content
-        }.getOrNull() ?: "unknown"
-        return SessionSnapshot(id, title, statusType)
+        return SessionSnapshot(id, title, statusTypeFromTime(obj["time"] as? JsonObject))
+    }
+
+    /** busy when an execution is running (time.busy newer than time.idle). */
+    private fun statusTypeFromTime(time: JsonObject?): String {
+        val busy = time?.get("busy")?.takeIf { it !is JsonNull }?.jsonPrimitive?.long
+        val idle = time?.get("idle")?.takeIf { it !is JsonNull }?.jsonPrimitive?.long
+        return if (busy != null && (idle == null || busy > idle)) "busy" else "idle"
     }
 
     private fun authedRequest(url: String): Request.Builder {

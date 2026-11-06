@@ -96,8 +96,9 @@ object NotificationHelper {
 
     /** Emits a user-facing notification for a session event. Tapping it opens
      *  the app deep-linked into that session in the WebView when the project
-     *  directory is known (web-UI route /{base64url(directory)}/session/{id});
-     *  otherwise it just opens the app. */
+     *  directory is known (the route format depends on the server's API
+     *  generation - see ApiVersionDetector.webUiSessionUrl); otherwise it
+     *  just opens the app. */
     fun notifyEvent(
         context: Context,
         notificationId: Int,

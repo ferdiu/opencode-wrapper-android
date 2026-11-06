@@ -21,6 +21,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import it.ferdiu.opencodewrapper.R
+import it.ferdiu.opencodewrapper.api.ApiVersionDetector
 import it.ferdiu.opencodewrapper.data.ServerConfig
 import it.ferdiu.opencodewrapper.data.ServerConfigStore
 import it.ferdiu.opencodewrapper.data.ServerProfileStore
@@ -141,22 +142,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Deep link into a specific session in the OpenCode web UI.
-     *
-     * Confirmed against the v1.18.18 web app router
-     * (packages/app/src/app.tsx + utils/session-route.ts): session pages
-     * live at `/{base64url(directory)}/session/{id}`, where the directory
-     * segment is URL-safe base64 without padding (legacySessionHref). The
-     * directory is learned from the /global/event envelope.
+     * Deep link into a specific session in the OpenCode web UI, honoring the
+     * server's detected API generation (v1: /{base64url(directory)}/session/{id};
+     * v2: /server/{base64url(baseUrl)}/session/{id}) - see
+     * [ApiVersionDetector.webUiSessionUrl]. The directory is learned from
+     * the event envelope.
      */
     private fun sessionUrl(config: ServerConfig, sessionId: String, directory: String): String =
-        "${config.normalizedBaseUrl}/${base64Url(directory)}/session/$sessionId"
-
-    private fun base64Url(value: String): String =
-        android.util.Base64.encodeToString(
-            value.toByteArray(Charsets.UTF_8),
-            android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP,
-        )
+        ApiVersionDetector.webUiSessionUrl(config, sessionId, directory)
 
     private fun maybeRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return

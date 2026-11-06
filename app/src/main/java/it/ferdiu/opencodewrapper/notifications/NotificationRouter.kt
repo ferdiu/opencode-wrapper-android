@@ -22,9 +22,9 @@ class NotificationRouter(private val context: Context) {
     private val sessionWasBusy = mutableMapOf<String, Boolean>()
     private val sessionTitles = mutableMapOf<String, String>()
 
-    /** Project directory per session, learned from the /global/event
-     *  envelope - needed to build web-UI deep links
-     *  (/{base64url(directory)}/session/{id}). */
+    /** Project directory per session, learned from the event envelope
+     *  (/global/event for v1 servers, location.directory for v2) - needed to
+     *  build web-UI deep links (see ApiVersionDetector.webUiSessionUrl). */
     private val sessionDirectories = mutableMapOf<String, String>()
 
     private val retryStreaks = RetryStreakTracker()

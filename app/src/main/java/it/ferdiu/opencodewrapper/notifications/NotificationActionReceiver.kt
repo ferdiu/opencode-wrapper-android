@@ -6,7 +6,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.RemoteInput
 import it.ferdiu.opencodewrapper.R
-import it.ferdiu.opencodewrapper.api.OpenCodeClientV2
+import it.ferdiu.opencodewrapper.api.ApiVersionDetector
 import it.ferdiu.opencodewrapper.api.PermissionDecision
 import it.ferdiu.opencodewrapper.data.ServerConfig
 import it.ferdiu.opencodewrapper.data.ServerConfigStore
@@ -60,7 +60,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
         sendReply(context, notificationId, repost = { note ->
             repostPermission(context, intent, note)
         }) { config ->
-            OpenCodeClientV2(config).replyPermission(sessionId, permissionId, decision, directory)
+            ApiVersionDetector.clientFor(config).replyPermission(sessionId, permissionId, decision, directory)
         }
     }
 
@@ -73,7 +73,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
         sendReply(context, notificationId, repost = { note ->
             repostQuestion(context, intent, note)
         }) { config ->
-            OpenCodeClientV2(config).replyQuestion(sessionId, requestId, answer, directory)
+            ApiVersionDetector.clientFor(config).replyQuestion(sessionId, requestId, answer, directory)
         }
     }
 

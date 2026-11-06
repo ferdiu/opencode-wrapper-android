@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import it.ferdiu.opencodewrapper.api.ApiVersionDetector
 
 /**
  * Android-facing persistence for the server profile list. All data lives in
@@ -43,17 +44,20 @@ class ServerProfileStore(context: Context) {
         val wasEmpty = profiles.size == 1
         prefs.edit().putString(KEY_PROFILES, ServerProfilesCodec.encodeProfiles(profiles)).apply()
         if (wasEmpty) setActive(profile.id) // first server becomes active automatically
+        ApiVersionDetector.invalidate()
     }
 
     fun update(profile: ServerProfile) {
         val profiles = list().map { if (it.id == profile.id) profile else it }
         prefs.edit().putString(KEY_PROFILES, ServerProfilesCodec.encodeProfiles(profiles)).apply()
+        ApiVersionDetector.invalidate()
     }
 
     fun delete(id: String) {
         val profiles = list().filterNot { it.id == id }
         prefs.edit().putString(KEY_PROFILES, ServerProfilesCodec.encodeProfiles(profiles)).apply()
         if (getActiveId() == id) setActive(null)
+        ApiVersionDetector.invalidate()
     }
 
     fun getActive(): ServerProfile? = getActiveId()?.let { get(it) }

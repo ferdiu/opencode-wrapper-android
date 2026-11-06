@@ -19,14 +19,25 @@ object MessageTextExtractor {
         for (i in messages.size - 1 downTo 0) {
             val obj = messages[i] as? JsonObject ?: continue
             val info = (obj["info"] as? JsonObject) ?: obj
-            val parts = (obj["parts"] as? JsonArray) ?: (info["parts"] as? JsonArray) ?: continue
 
-            val text = parts.mapNotNull { part ->
-                val p = part as? JsonObject ?: return@mapNotNull null
-                val type = (p["type"] as? JsonPrimitive)?.contentOrNull()
-                if (type != null && type != "text") return@mapNotNull null
-                (p["text"] as? JsonPrimitive)?.contentOrNull()
-            }.filter { it.isNotBlank() }.joinToString("\n")
+            // v1 shape: parts/content arrays of { type, text }. v2 shape:
+            // user messages carry a plain top-level "text" string, assistant
+            // messages a "content" array of { type: "text"|"tool"|…, text }.
+            val parts = (obj["parts"] as? JsonArray)
+                ?: (info["parts"] as? JsonArray)
+                ?: (obj["content"] as? JsonArray)
+                ?: (info["content"] as? JsonArray)
+
+            val text = if (parts != null) {
+                parts.mapNotNull { part ->
+                    val p = part as? JsonObject ?: return@mapNotNull null
+                    val type = (p["type"] as? JsonPrimitive)?.contentOrNull()
+                    if (type != null && type != "text") return@mapNotNull null
+                    (p["text"] as? JsonPrimitive)?.contentOrNull()
+                }.filter { it.isNotBlank() }.joinToString("\n")
+            } else {
+                (obj["text"] as? JsonPrimitive)?.contentOrNull()?.takeIf { it.isNotBlank() } ?: continue
+            }
 
             if (text.isNotBlank()) {
                 val role = (info["role"] as? JsonPrimitive)?.contentOrNull()

@@ -44,9 +44,10 @@ replies from the car screen.
   message, one-tap permission decisions, and dictated replies confirmed
   before sending.
 - A deep-link launcher: tapping a notification opens the app straight into
-  the relevant session in the WebView (verified web-UI route
-  `/{base64url(directory)}/session/{id}`; the directory is learned from the
-  global event envelope).
+  the relevant session in the WebView, using the web-UI route for the
+  server's API generation (v1: `/{base64url(directory)}/session/{id}`;
+  v2: `/server/{base64url(baseUrl)}/session/{id}`); the directory is learned
+  from the event envelope.
 
 **This app IS NOT:**
 
@@ -139,8 +140,11 @@ it connects to.
 
 ```
 app/src/main/java/it/ferdiu/opencodewrapper/
-  api/            OpenCodeClient abstraction + the one real implementation
-                  (OpenCodeClientV2) + tolerant event parsing (OcEvent)
+  api/            OpenCodeClient abstraction + the two implementations
+                  (OpenCodeClientV1 for OpenCode 1.x servers,
+                  OpenCodeClientV2 for OpenCode 2.x servers) +
+                  ApiVersionDetector (per-server probe + client factory) +
+                  tolerant event parsing (OcEvent)
   service/        Foreground service, reconnect/backoff policy, boot receiver
   notifications/  Channels + event -> notification decision logic
   data/           Encrypted config storage (server URL, auth header)
@@ -152,19 +156,62 @@ app/src/main/java/it/ferdiu/opencodewrapper/
 
 The `api/` package is the isolation boundary called for in the design brief:
 **everything else in the app talks to `OpenCodeClient`, never to raw
-endpoint paths.** If/when OpenCode's V1→V2 migration changes the wire
-protocol again, only `OpenCodeClientV2.kt` (or a new `OpenCodeClientV3`)
+endpoint paths.** If a future OpenCode release changes the wire protocol
+again, only the client implementations (or a new `OpenCodeClientV3`)
 should need to change.
 
-## What I verified against the actual v1.18.18 source, and what I had to assume
+## OpenCode 1 vs OpenCode 2 servers
+
+The app supports both server generations, per server profile:
+
+- **Detection.** On connect, the app probes `GET /api/info`. OpenCode 2.x
+  answers 200 with a JSON body containing a `version` field; OpenCode 1.x
+  has no `/api/…` routes at all (verified in the v1.19.5 source), so
+  anything else means "not v2". The result is cached per server URL.
+- **Per-server toggle.** Each server has a *"Legacy server (OpenCode v1
+  API)"* switch (on by default, including for profiles saved before the
+  toggle existed). On: the app falls back to the v1 protocol whenever the
+  v2 probe fails. Off: the app strictly requires v2 and reports
+  *"Server is not an OpenCode 2.x server"* instead of silently downgrading.
+- **Auth on v2.** OpenCode 2.x serves HTTP Basic auth with username
+  `opencode` and the password from `OPENCODE_PASSWORD`. The app's existing
+  username/password fields (and the raw auth-header setting) produce
+  `Authorization: Basic base64(opencode:password)` and work unchanged for
+  both generations.
+- **v2 wire protocol** (verified against upstream tag v2.2.5):
+  `GET /api/event` SSE stream of flat events
+  `{id, created, type, location?, data}`; `GET /api/session` (+`{id}`,
+  `/active`, `/{id}/message`); `POST /api/session/{id}/prompt` with
+  `{text}`; permission replies via
+  `POST /api/session/{id}/permission/{requestID}/reply` (`{decision}`), with
+  v1 "questions" generalized into "forms" (`POST …/form/{formID}/reply` with
+  `{answer: {fieldKey: value}}`); projects list `GET /api/project` (the v1
+  `worktree` field is now `canonical`).
+- **Deep links** follow the server's web app: v1
+  `/{base64url(directory)}/session/{id}`, v2
+  `/server/{base64url(baseUrl)}/session/{id}` (the v2 route encodes the
+  server's own base URL, not the project directory).
+
+Future work: the v2 pairing-link flow (`opencode pair` /
+`/auth/connect/{code}` QR sign-in) is not implemented; username/password
+and raw-header auth cover both generations for now.
+
+## What I verified against the actual v1.18.18–v1.19.5 source, and what I had to assume
 
 I inspected the `anomalyco/opencode` repository (the project moved from
-`sst/opencode` to `anomalyco/opencode` on GitHub) at the `v1.18.18` tag —
-including the SSE route handlers
+`sst/opencode` to `anomalyco/opencode` on GitHub) at the `v1.18.18` and
+`v1.19.5` tags — including the SSE route handlers
 (`server/routes/instance/httpapi/handlers/{event,global}.ts`) — and the
 generated v2 SDK types (`packages/sdk/js/src/v2/gen/types.gen.ts`), rather
 than assuming the protocol from memory or from older OpenCode versions.
-Here's what's confirmed vs. what's a documented best guess:
+**Every route handler the app depends on (`session`, `permission`,
+`question`, `project`, `event`) is byte-identical between v1.18.18 and
+v1.19.5**, as is the web-app `utils/session-route.ts` deep-link helper; the
+only v1.19.5 differences are in the `upgrade` endpoint, PTY ticket
+middleware, and an added error-mapping case — none of which the app uses.
+The OpenCode 2.x contract was verified against upstream tag `v2.2.5`
+(packages/protocol + packages/schema). Here's what's confirmed vs. what's
+a documented best guess:
 
 **Confirmed:**
 - `GET /global/health` — liveness/version check.
