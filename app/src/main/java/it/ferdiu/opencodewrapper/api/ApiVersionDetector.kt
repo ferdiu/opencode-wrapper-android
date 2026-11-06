@@ -33,16 +33,21 @@ class ApiVersionException(message: String) : IOException(message)
  *    [ApiVersionException] so the caller can surface "not an OpenCode 2.x
  *    server" instead of silently downgrading.
  *
- * Results are cached per normalized base URL so the foreground service
- * doesn't re-probe on every reconnect. [invalidate] is called from the
- * profile store on any add/update/delete (editing a server clears the cache,
- * so a changed URL or toggle is picked up immediately).
+     * Only definitive HTTP answers are cached (2xx → V2, 404/other HTTP
+     * response → V1), with a TTL of 10 minutes: transport failures
+     * (IOException/timeout) propagate to the caller so the service's
+ * reconnect/backoff can retry the probe later instead of serving a
+ * poisoned "V1" result for a merely unreachable server. [invalidate] is
+ * called from the profile store on any add/update/delete (editing a server
+ * clears the cache, so a changed URL or toggle is picked up immediately).
  */
 object ApiVersionDetector {
 
     enum class ServerApi { V1, V2 }
 
-    private val cache = ConcurrentHashMap<String, ServerApi>()
+    private data class CachedResult(val api: ServerApi, val timestampMillis: Long)
+
+    private val cache = ConcurrentHashMap<String, CachedResult>()
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -54,23 +59,33 @@ object ApiVersionDetector {
         .retryOnConnectionFailure(false)
         .build()
 
-    /** Last detection result for [baseUrl], or null when not probed yet. */
-    fun cached(baseUrl: String): ServerApi? = cache[baseUrl.trimEnd('/')]
+    /** Last detection result for [baseUrl], or null when not probed yet or
+     *  the cached result has expired ([cacheTtlMillis]). */
+    fun cached(baseUrl: String): ServerApi? = cache[baseUrl.trimEnd('/')].let { entry ->
+        when {
+            entry == null -> null
+            isFresh(entry) -> entry.api
+            else -> {
+                cache.remove(baseUrl.trimEnd('/'), entry)
+                null
+            }
+        }
+    }
 
     /** Clears every cached detection result (profile add/update/delete). */
     fun invalidate() = cache.clear()
 
     /**
-     * Probes the server (unless cached) and returns the detected generation.
-     * Never throws for "server is not v2" - that outcome is [ServerApi.V1];
-     * transport failures also degrade to V1 (the lenient default the service
-     * relies on, matching the v1 client's runCatching philosophy).
+     * Probes the server (unless cached within the TTL) and returns the
+     * detected generation. Never throws for "server is not v2" - that
+     * outcome is [ServerApi.V1]; transport failures (IOException/timeout)
+     * propagate so the caller's reconnect/backoff retries the probe later.
      */
     suspend fun detect(config: ServerConfig): ServerApi {
         val key = config.normalizedBaseUrl
-        cache[key]?.let { return it }
+        cached(key)?.let { return it }
         val detected = probe(config)
-        cache[key] = detected
+        cache[key] = CachedResult(detected, System.currentTimeMillis())
         return detected
     }
 
@@ -123,7 +138,8 @@ object ApiVersionDetector {
             .withoutPadding()
             .encodeToString(value.toByteArray(Charsets.UTF_8))
 
-    /** 200 + parseable JSON `version` field → V2; absolutely anything else → V1. */
+    /** 200 + parseable JSON `version` field → V2; absolutely anything else → V1.
+     *  Transport failures propagate uncached. */
     private suspend fun probe(config: ServerConfig): ServerApi {
         val builder = Request.Builder().url("${config.normalizedBaseUrl}/api/info")
         config.authHeaderValue?.takeIf { it.isNotBlank() }?.let { raw ->
@@ -136,16 +152,14 @@ object ApiVersionDetector {
                 builder.header("Authorization", raw.trim())
             }
         }
-        return runCatching {
-            val body = executeAsync(probeHttp, builder.build()).use { resp ->
-                if (!resp.isSuccessful) return@runCatching ServerApi.V1
-                resp.body.string()
-            }
-            val version = runCatching {
-                json.parseToJsonElement(body).jsonObject["version"]?.jsonPrimitive?.content
-            }.getOrNull()
-            if (version != null) ServerApi.V2 else ServerApi.V1
-        }.getOrDefault(ServerApi.V1)
+        val body = executeAsync(probeHttp, builder.build()).use { resp ->
+            if (!resp.isSuccessful) return ServerApi.V1
+            resp.body.string()
+        }
+        val version = runCatching {
+            json.parseToJsonElement(body).jsonObject["version"]?.jsonPrimitive?.content
+        }.getOrNull()
+        return if (version != null) ServerApi.V2 else ServerApi.V1
     }
 
     private suspend fun executeAsync(http: OkHttpClient, request: Request): Response =
@@ -162,6 +176,13 @@ object ApiVersionDetector {
                 }
             })
         }
+
+    private fun isFresh(entry: CachedResult): Boolean =
+        System.currentTimeMillis() - entry.timestampMillis < cacheTtlMillis
+
+    /** Cache TTL for detection results. Internal so unit tests can
+     *  exercise expiry. */
+    internal var cacheTtlMillis = 10L * 60_000L
 
     private const val PROBE_TIMEOUT_SECONDS = 5L
 }

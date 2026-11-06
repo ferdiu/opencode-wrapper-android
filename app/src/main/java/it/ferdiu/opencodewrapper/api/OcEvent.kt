@@ -252,9 +252,13 @@ object OcEventParser {
                 val form = (props["form"] as? JsonObject) ?: return OcEvent.Unknown(type, json)
                 val id = form.stringOrNull("id") ?: return OcEvent.Unknown(type, json)
                 val sid = form.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
-                val prompt = form.stringOrNull("title")
-                    ?: (form["fields"] as? kotlinx.serialization.json.JsonArray)
-                        ?.firstOrNull()?.let { (it as? JsonObject)?.stringOrNull("description") }
+                // The form title is the static string "Questions"; the
+                // actual question text lives in the first field's
+                // description (falling back to the field title).
+                val prompt = (form["fields"] as? kotlinx.serialization.json.JsonArray)
+                    ?.firstOrNull()?.let { (it as? JsonObject) }
+                    ?.let { field -> field.stringOrNull("description") ?: field.stringOrNull("title") }
+                    ?: form.stringOrNull("title")
                 OcEvent.QuestionAsked(id, sid, prompt)
             }
 

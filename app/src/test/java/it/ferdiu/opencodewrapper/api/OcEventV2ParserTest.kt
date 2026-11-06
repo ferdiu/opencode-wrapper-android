@@ -87,7 +87,54 @@ class OcEventV2ParserTest {
         val event = envelope.event as OcEvent.QuestionAsked
         assertEquals("frm_1", event.requestId)
         assertEquals("ses_9", event.sessionId)
-        assertEquals("Questions", event.prompt)
+        // The form title is the static string "Questions"; the field
+        // description (the actual question text) must win.
+        assertEquals("Which color?", event.prompt)
+    }
+
+    @Test
+    fun `form created prompt falls back to field title then form title`() {
+        val withFieldTitle = parseV2Event(
+            """
+            {
+              "id": "evt_3b",
+              "created": 1720000000004,
+              "type": "form.created",
+              "data": {
+                "form": {
+                  "id": "frm_2",
+                  "sessionID": "ses_9",
+                  "title": "Questions",
+                  "fields": [
+                    { "key": "q0", "type": "string", "title": "Pick a color" }
+                  ]
+                }
+              }
+            }
+            """.trimIndent()
+        )!!
+        assertEquals("Pick a color", (withFieldTitle.event as OcEvent.QuestionAsked).prompt)
+
+        val withFormTitleOnly = parseV2Event(
+            """
+            {
+              "id": "evt_3c",
+              "created": 1720000000005,
+              "type": "form.created",
+              "data": {
+                "form": {
+                  "id": "frm_3",
+                  "sessionID": "ses_9",
+                  "title": "Deploy to production?",
+                  "fields": [
+                    { "key": "q0", "type": "string" }
+                  ]
+                }
+              }
+            }
+            """.trimIndent()
+        )!!
+        assertEquals("Deploy to production?", (withFormTitleOnly.event as OcEvent.QuestionAsked).prompt)
     }
 
     @Test

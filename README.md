@@ -194,7 +194,10 @@ The app supports both server generations, per server profile:
 
 Future work: the v2 pairing-link flow (`opencode pair` /
 `/auth/connect/{code}` QR sign-in) is not implemented; username/password
-and raw-header auth cover both generations for now.
+and raw-header auth cover both generations for now. Multi-question forms
+are also only partially supported: the app answers the first question
+field only, so a form with several questions will be rejected (400) by
+the server.
 
 ## What I verified against the actual v1.18.18–v1.19.5 source, and what I had to assume
 

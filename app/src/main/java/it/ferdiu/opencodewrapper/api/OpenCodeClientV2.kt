@@ -184,9 +184,11 @@ class OpenCodeClientV2(
         // message? } -> 204. Permission.Reply literals "once"/"always"/
         // "reject" match PermissionDecision.apiValue exactly.
         val url = "${config.normalizedBaseUrl}/api/session/$sessionId/permission/$requestId/reply"
+        // `message` is optional-but-not-nullable upstream: an explicit null
+        // makes the server reject the reply, so the key must be omitted
+        // entirely when there is no message.
         val payload = buildJsonObject {
             put("decision", decision.apiValue)
-            put("message", JsonNull)
         }.toString()
         val request = authedRequest(url)
             .post(payload.toRequestBody("application/json".toMediaType()))
@@ -204,6 +206,10 @@ class OpenCodeClientV2(
         // question tool names its fields q0, q1, … (packages/core/src/tool/
         // plugin/question.ts); resolve the actual first field key from the
         // form detail when available, falling back to "q0".
+        // LIMIT: single-field reply only. The question tool can create
+        // multi-question forms (fields q0, q1, …) but this always answers
+        // just the first field, so a multi-question form will be rejected
+        // (400) server-side. Multi-field answering is future work.
         val key = formFirstFieldKey(sessionId, requestId) ?: "q0"
         val url = "${config.normalizedBaseUrl}/api/session/$sessionId/form/$requestId/reply"
         val payload = buildJsonObject {

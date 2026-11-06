@@ -2,9 +2,6 @@ package it.ferdiu.opencodewrapper.api
 
 import it.ferdiu.opencodewrapper.data.ServerConfig
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
@@ -89,8 +86,24 @@ class OpenCodeClientV2ApiTest {
         val recorded = server.takeRequest()
         assertEquals("POST", recorded.method)
         assertEquals("/api/session/ses_1/permission/per_1/reply", recorded.path)
-        val body = Json.parseToJsonElement(recorded.body.readUtf8()).jsonObject
-        assertEquals("always", body["decision"]!!.jsonPrimitive.content)
+        // `message` is optional-but-not-nullable upstream: the key must be
+        // omitted entirely, never sent as an explicit null.
+        assertEquals("""{"decision":"always"}""", recorded.body.readUtf8())
+    }
+
+    @Test
+    fun `reply permission body has no message key for any decision`() = runTest {
+        val expected = mapOf(
+            PermissionDecision.ONCE to """{"decision":"once"}""",
+            PermissionDecision.ALWAYS to """{"decision":"always"}""",
+            PermissionDecision.REJECT to """{"decision":"reject"}""",
+        )
+        for ((decision, body) in expected) {
+            server.enqueue(MockResponse().setResponseCode(204))
+
+            assertTrue(client().replyPermission("ses_1", "per_1", decision, null))
+            assertEquals(body, server.takeRequest().body.readUtf8())
+        }
     }
 
     @Test
