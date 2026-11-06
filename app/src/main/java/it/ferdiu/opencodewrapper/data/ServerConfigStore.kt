@@ -11,6 +11,10 @@ data class ServerConfig(
     val baseUrl: String,
     val authHeaderValue: String?,
     val lastSessionId: String? = null,
+    /** Mirrors ServerProfile.v1CompatMode: may the API detector fall back to
+     *  the OpenCode 1.x protocol when the 2.x probe fails? Default true so
+     *  configs built without it (tests, legacy call sites) stay lenient. */
+    val v1CompatMode: Boolean = true,
 ) {
     /** Normalized base URL with no trailing slash, e.g. "https://host:4096" */
     val normalizedBaseUrl: String get() = baseUrl.trimEnd('/')

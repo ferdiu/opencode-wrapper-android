@@ -7,7 +7,7 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import it.ferdiu.opencodewrapper.R
-import it.ferdiu.opencodewrapper.api.OpenCodeClientV2
+import it.ferdiu.opencodewrapper.api.ApiVersionDetector
 import it.ferdiu.opencodewrapper.data.ServerProfile
 import it.ferdiu.opencodewrapper.data.ServerProfileStore
 import it.ferdiu.opencodewrapper.databinding.ActivityServerEditBinding
@@ -47,6 +47,7 @@ class ServerEditActivity : AppCompatActivity() {
         binding.serverUrlInput.setText(p.baseUrl)
         binding.usernameInput.setText(p.username ?: "")
         binding.passwordInput.setText(p.password ?: "")
+        binding.v1CompatSwitch.isChecked = p.v1CompatMode
         if (!p.authHeaderValue.isNullOrBlank()) {
             binding.authHeaderInput.setText(p.authHeaderValue)
             binding.authHeaderLayout.visibility = View.VISIBLE
@@ -82,11 +83,12 @@ class ServerEditActivity : AppCompatActivity() {
             username = username.ifBlank { null },
             password = if (username.isBlank()) null else password,
             authHeaderValue = authHeader.ifBlank { null },
+            v1CompatMode = binding.v1CompatSwitch.isChecked,
         )
 
         lifecycleScope.launch {
             val reachable = runCatching {
-                OpenCodeClientV2(profile.toServerConfig()).healthCheck()
+                ApiVersionDetector.clientFor(profile.toServerConfig()).healthCheck()
             }.getOrDefault(false)
 
             val isNew = editingId == null

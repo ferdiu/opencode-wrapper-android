@@ -23,6 +23,7 @@
     <string name="service_notif_connecting">Connecting to OpenCode…</string>
     <string name="service_notif_reconnecting">Reconnecting…</string>
     <string name="service_notif_offline">Not connected — tap to configure</string>
+    <string name="service_notif_not_v2_server">Server is not an OpenCode 2.x server (v1 fallback disabled)</string>
 
     <string name="notif_action_allow">Allow</string>
     <string name="notif_action_allow_always">Allow always</string>
@@ -43,6 +44,8 @@
     <string name="label_password">Password</string>
     <string name="label_advanced">Advanced</string>
     <string name="hint_auth_precedence">If a username is set, it takes precedence over this header.</string>
+    <string name="label_v1_compat">Legacy server (OpenCode v1 API)</string>
+    <string name="summary_v1_compat">Allow fallback to the v1 API if this server doesn\'t speak the v2 API. Turn off to strictly require v2.</string>
     <string name="action_add_server">Add server</string>
     <string name="action_delete">Delete</string>
     <string name="action_manage_servers">Manage servers…</string>

@@ -106,6 +106,22 @@
             android:textColor="@color/on_surface"
             android:textSize="12sp" />
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/v1CompatSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:checked="true"
+            android:text="@string/label_v1_compat" />
+
+        <TextView
+            android:id="@+id/v1CompatSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/summary_v1_compat"
+            android:textColor="@color/on_surface"
+            android:textSize="12sp" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/saveButton"
             android:layout_width="match_parent"

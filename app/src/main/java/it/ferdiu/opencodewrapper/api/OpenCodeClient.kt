@@ -4,11 +4,13 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * Everything the rest of the app needs from an OpenCode server, kept behind
- * this interface on purpose: OpenCode is mid-migration from its V1 API to a
- * V2 API (confirmed against v1.18.18 - see [OpenCodeClientV2] for the exact
- * endpoints and the assumptions we had to make), and the server-side surface
- * is expected to keep shifting release to release. If it changes again,
- * only the implementation below should need to change - nothing in
+ * this interface on purpose: two implementations exist - [OpenCodeClientV1]
+ * (OpenCode 1.x servers, `/global/event` + `/session/…` style endpoints,
+ * verified against upstream tags v1.18.18–v1.19.5) and [OpenCodeClientV2]
+ * (OpenCode 2.x servers, `/api/…` endpoints) - and [ApiVersionDetector]
+ * picks the right one per server profile. The server-side surface is
+ * expected to keep shifting release to release; if it changes again, only
+ * the implementations below should need to change - nothing in
  * `service/` or `ui/` should know or care about raw endpoint paths.
  */
 interface OpenCodeClient {

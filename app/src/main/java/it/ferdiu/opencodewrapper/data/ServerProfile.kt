@@ -20,6 +20,11 @@ data class ServerProfile(
     val username: String? = null,
     val password: String? = null,
     val authHeaderValue: String? = null,
+    /** Whether the API detector may fall back to the OpenCode 1.x protocol
+     *  when the server doesn't answer the 2.x probe. Default true so profiles
+     *  saved before this field existed (absent key on deserialization) keep
+     *  working against 1.x servers. */
+    val v1CompatMode: Boolean = true,
 ) {
     fun toServerConfig(lastSessionId: String? = null): ServerConfig {
         val header = if (!username.isNullOrBlank()) {
@@ -33,6 +38,7 @@ data class ServerProfile(
             baseUrl = baseUrl,
             authHeaderValue = header,
             lastSessionId = lastSessionId,
+            v1CompatMode = v1CompatMode,
         )
     }
 }

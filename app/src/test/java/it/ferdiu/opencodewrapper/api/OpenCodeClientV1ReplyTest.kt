@@ -14,15 +14,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-class OpenCodeClientV2ReplyTest {
+class OpenCodeClientV1ReplyTest {
 
     private lateinit var server: MockWebServer
 
     @Before fun setUp() { server = MockWebServer(); server.start() }
     @After fun tearDown() = server.shutdown()
 
-    private fun client(): OpenCodeClientV2 =
-        OpenCodeClientV2(ServerConfig(baseUrl = server.url("/").toString().trimEnd('/'), authHeaderValue = null))
+    private fun client(): OpenCodeClientV1 =
+        OpenCodeClientV1(ServerConfig(baseUrl = server.url("/").toString().trimEnd('/'), authHeaderValue = null))
 
     @Test
     fun `reply permission posts decision to the reply endpoint`() = runTest {

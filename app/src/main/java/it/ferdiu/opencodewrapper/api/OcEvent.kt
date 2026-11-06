@@ -1,5 +1,6 @@
 package it.ferdiu.opencodewrapper.api
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -64,9 +65,9 @@ sealed class OcEvent {
 }
 
 /** A parsed event plus the project directory it belongs to. The directory
- *  comes from the /global/event envelope
- *  ({ "directory": "...", "payload": {...} }) and is needed to build web-UI
- *  deep links of the form /{base64url(directory)}/session/{id}. Null for
+ *  comes from the v1 /global/event envelope ({ "directory": "...", "payload":
+ *  {...} }) or the v2 event's location.directory, and is needed to build
+ *  web-UI deep links (see ApiVersionDetector.webUiSessionUrl). Null for
  *  events that carry no directory (or older unwrapped payloads). */
 data class OcEnvelope(val directory: String?, val event: OcEvent)
 
@@ -184,6 +185,123 @@ object OcEventParser {
             else -> OcEvent.Unknown(type, json)
         }
     }
+
+    /**
+     * Parses one OpenCode **2.x** SSE `data:` payload from `GET /api/event`.
+     * Confirmed against upstream v2.2.5 (packages/schema/src + session-event.ts):
+     * each event is a flat object
+     *   { "id", "created", "type", "metadata"?, "durable"?,
+     *     "location": { "directory" }?, "data" }
+     * i.e. `type` is top-level (NOT nested in metadata as older API docs
+     * suggested) and the payload lives in `data`. Unknown types degrade to
+     * [OcEvent.Unknown] exactly like the v1 path.
+     */
+    fun parseV2(json: JsonObject): OcEvent {
+        val type = (json["type"] as? JsonPrimitive)?.contentOrNullSafe() ?: return OcEvent.Unknown("unknown", json)
+        val props = (json["data"] as? JsonObject) ?: JsonObject(emptyMap())
+
+        return when (type) {
+            "server.connected" -> OcEvent.Connected(json)
+
+            // v2 has no explicit session.idle/busy events: the execution
+            // lifecycle carries that signal (data = { sessionID }).
+            "session.execution.started" -> {
+                val sid = props.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
+                OcEvent.SessionBusy(sid)
+            }
+            "session.execution.succeeded", "session.execution.interrupted" -> {
+                val sid = props.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
+                OcEvent.SessionIdle(sid)
+            }
+            "session.execution.failed", "session.step.failed" -> {
+                val sid = props.stringOrNull("sessionID")
+                val message = (props["error"] as? JsonObject)?.stringOrNull("message")
+                OcEvent.SessionError(sid, message)
+            }
+
+            // v2 schema (schema/src/permission.ts): data = Permission.Request
+            // = { id, sessionID, action, resources[], save?[], message?, … }.
+            // Human-readable label: action plus the resources it applies to
+            // (the v1 "patterns" list became "resources").
+            "permission.asked" -> {
+                val id = props.stringOrNull("id") ?: return OcEvent.Unknown(type, json)
+                val sid = props.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
+                val label = props.stringOrNull("message")
+                    ?: props.stringOrNull("action")?.let { action ->
+                        val resources = (props["resources"] as? kotlinx.serialization.json.JsonArray)
+                            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNullSafe() }
+                            .orEmpty()
+                        if (resources.isEmpty()) action else "$action: " + resources.joinToString(", ")
+                    }
+                OcEvent.PermissionAsked(id, sid, label)
+            }
+
+            // v2 schema: data = { sessionID, requestID, reply }.
+            "permission.replied" -> {
+                val id = props.stringOrNull("requestID") ?: props.stringOrNull("id")
+                val sid = props.stringOrNull("sessionID")
+                if (id == null || sid == null) return OcEvent.Unknown(type, json)
+                OcEvent.PermissionReplied(id, sid)
+            }
+
+            // v2 generalizes v1 "questions" into "forms" (schema/src/form.ts):
+            // data = { form: { id, sessionID, title, fields[] } }. The question
+            // tool creates one string field per question; the field description
+            // carries the question text, the form title is "Questions".
+            "form.created" -> {
+                val form = (props["form"] as? JsonObject) ?: return OcEvent.Unknown(type, json)
+                val id = form.stringOrNull("id") ?: return OcEvent.Unknown(type, json)
+                val sid = form.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
+                // The form title is the static string "Questions"; the
+                // actual question text lives in the first field's
+                // description (falling back to the field title).
+                val prompt = (form["fields"] as? kotlinx.serialization.json.JsonArray)
+                    ?.firstOrNull()?.let { (it as? JsonObject) }
+                    ?.let { field -> field.stringOrNull("description") ?: field.stringOrNull("title") }
+                    ?: form.stringOrNull("title")
+                OcEvent.QuestionAsked(id, sid, prompt)
+            }
+
+            // v2 schema: data = { id, sessionID, answer? } - answered or
+            // dismissed, either way the notification should come down.
+            "form.replied", "form.cancelled" -> {
+                val id = props.stringOrNull("id") ?: return OcEvent.Unknown(type, json)
+                val sid = props.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
+                OcEvent.QuestionSettled(id, sid)
+            }
+
+            // v2 schema: data = { sessionID }.
+            "session.deleted" -> {
+                val sid = props.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
+                OcEvent.SessionDeleted(sid)
+            }
+
+            // v2 schemas: created = { sessionID, title?, … }, renamed =
+            // { sessionID, title }.
+            "session.created", "session.renamed" -> {
+                val sid = props.stringOrNull("sessionID") ?: return OcEvent.Unknown(type, json)
+                OcEvent.SessionUpdated(sid, props.stringOrNull("title"))
+            }
+
+            else -> OcEvent.Unknown(type, json)
+        }
+    }
+
+    /**
+     * Parses a raw v2 SSE `data:` line into an [OcEnvelope]: the event via
+     * [parseV2], the project directory from `location.directory` (falling
+     * back to [fallbackDirectory] when the event carries no location). Null
+     * when the payload isn't valid JSON.
+     */
+    fun parseV2Event(data: String, fallbackDirectory: String?): OcEnvelope? = runCatching {
+        val obj = json.parseToJsonElement(data).jsonObject
+        val directory = ((obj["location"] as? JsonObject)
+            ?.get("directory") as? JsonPrimitive)?.contentOrNullSafe()
+            ?: fallbackDirectory
+        OcEnvelope(directory, parseV2(obj))
+    }.getOrNull()
+
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 }
 
 private fun JsonPrimitive.contentOrNullSafe(): String? = runCatching { content }.getOrNull()
