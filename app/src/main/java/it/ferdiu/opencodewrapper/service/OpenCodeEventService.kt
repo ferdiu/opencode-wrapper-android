@@ -11,6 +11,8 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import it.ferdiu.opencodewrapper.api.ApiVersionDetector
 import it.ferdiu.opencodewrapper.api.ApiVersionException
+import it.ferdiu.opencodewrapper.api.OcEnvelope
+import it.ferdiu.opencodewrapper.api.OcEvent
 import it.ferdiu.opencodewrapper.api.OpenCodeClient
 import it.ferdiu.opencodewrapper.data.ServerConfig
 import it.ferdiu.opencodewrapper.data.ServerConfigStore
@@ -118,13 +120,36 @@ class OpenCodeEventService : LifecycleService() {
     private suspend fun runEventStream(client: OpenCodeClient, config: ServerConfig): Boolean {
         return try {
             client.events() // global stream: all sessions across all projects
-                .onEach { envelope -> notificationRouter.onEvent(envelope.event, envelope.directory) }
+                .onEach { envelope -> routeEvent(client, envelope) }
                 .catch { e -> Log.w(TAG, "Event stream error", e) }
                 .collect()
             true // flow completed (server closed the stream) -> reconnect
         } catch (e: CancellationException) {
             false // service is being torn down, don't reconnect
         }
+    }
+
+    /** Feeds one stream event to the notification router, fetching the
+     *  session title on demand first when a terminal event (idle/error) is
+     *  about to surface a notification for a session whose title was never
+     *  learned. OpenCode v2 generates titles in a background fiber, so
+     *  `session.renamed` can land AFTER `session.execution.succeeded` - and
+     *  sessions that existed before we connected never announce a title at
+     *  all. One extra REST call only in the unknown-title case. */
+    private suspend fun routeEvent(client: OpenCodeClient, envelope: OcEnvelope) {
+        val event = envelope.event
+        val sessionId = when (event) {
+            is OcEvent.SessionIdle -> event.sessionId
+            is OcEvent.SessionError -> event.sessionId
+            else -> null
+        }
+        if (sessionId != null && notificationRouter.needsTitle(sessionId)) {
+            val title = runCatching { client.getSessionSnapshot(sessionId)?.title }.getOrNull()
+            if (title != null) {
+                notificationRouter.onEvent(OcEvent.SessionUpdated(sessionId, title), envelope.directory)
+            }
+        }
+        notificationRouter.onEvent(event, envelope.directory)
     }
 
     private suspend fun runRecoveryPass(client: OpenCodeClient) {

@@ -198,6 +198,11 @@ class NotificationRouter(private val context: Context) {
         sessionWasBusy[sessionId] = true
     }
 
+    /** True when no human-readable title has been learned for [sessionId]
+     *  yet (so the caller may want to fetch one before notifying). */
+    fun needsTitle(sessionId: String?): Boolean =
+        sessionId != null && !sessionTitles.containsKey(sessionId)
+
     private fun sessionLabel(sessionId: String?): String =
         sessionId?.let { sessionTitles[it] } ?: "your OpenCode session"
 
