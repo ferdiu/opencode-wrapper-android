@@ -11,8 +11,8 @@ android {
         applicationId = "it.ferdiu.opencodewrapper"
         minSdk = 26 // Foreground service types + notification channels need 26+
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.5.0"
+        versionCode = 10
+        versionName = "0.5.1"
     }
 
     buildTypes {
