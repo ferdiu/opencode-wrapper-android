@@ -44,6 +44,19 @@ class MainActivity : AppCompatActivity() {
     /** Base URL the WebView was last loaded for; used to detect server switches. */
     private var loadedBaseUrl: String? = null
 
+    /** Enabled only while the WebView can go back; the enabled state is
+     *  refreshed by [refreshWebViewBackState] on every history change, so
+     *  the callback never needs to disable itself permanently. */
+    private val webViewBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            binding.webView.goBack()
+        }
+    }
+
+    private fun refreshWebViewBackState() {
+        webViewBackCallback.isEnabled = binding.webView.canGoBack()
+    }
+
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op either way */ }
 
@@ -59,18 +72,11 @@ class MainActivity : AppCompatActivity() {
         // The WebView owns the back gesture while it has history: the user
         // navigates inside the OpenCode web app (session -> home, dialogs
         // that push history entries, ...), so "back" must mean browser-back,
-        // not "close the app". Once the history is exhausted the callback
-        // steps aside and the default behavior (finish) applies.
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (binding.webView.canGoBack()) {
-                    binding.webView.goBack()
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                }
-            }
-        })
+        // not "close the app". The callback's enabled state tracks
+        // canGoBack() (refreshed on every history change), so once the
+        // history is exhausted the default behavior (finish) applies - and
+        // the callback re-engages by itself as soon as new history appears.
+        onBackPressedDispatcher.addCallback(this, webViewBackCallback)
         binding.openSettingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
@@ -133,6 +139,13 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String?) {
                 binding.progressBar.visibility = android.view.View.GONE
+                refreshWebViewBackState()
+            }
+
+            override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                // Fires on every new history entry, including SPA pushState
+                // navigations that never trigger onPageFinished.
+                refreshWebViewBackState()
             }
         }
 
